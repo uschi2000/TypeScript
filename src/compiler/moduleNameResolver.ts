@@ -845,7 +845,8 @@ namespace ts {
         return loadNodeModuleFromDirectory(extensions, candidate, failedLookupLocations, onlyRecordFailures, state, considerPackageJson);
     }
 
-    const nodeModulesPathPart = "/node_modules/";
+    /*@internal*/
+    export const nodeModulesPathPart = "/node_modules/";
 
     /**
      * This will be called on the successfully resolved path from `loadModuleFromFile`.

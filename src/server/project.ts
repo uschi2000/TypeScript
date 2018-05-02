@@ -232,6 +232,7 @@ namespace ts.server {
             if (host.realpath) {
                 this.realpath = path => host.realpath(path);
             }
+            this.projectService.logger.info(`Project ${projectName} created with currentDirectory: ${currentDirectory} which resolves to ${this.currentDirectory}`);
 
             // Use the current directory as resolution root only if the project created using current directory string
             this.resolutionCache = createResolutionCache(this, currentDirectory && this.currentDirectory, /*logChangesWhenResolvingModule*/ true);
