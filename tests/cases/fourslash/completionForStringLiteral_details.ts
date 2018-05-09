@@ -17,8 +17,7 @@
 ////declare const o: I;
 ////o["/*prop*/"];
 
-goTo.marker("path");
-verify.completionListContains("other", "other", "", "script");
+verify.completions({ marker: "path", includes: { name: "other", text: "other", kind: "script" }, isNewIdentifierLocation: true });
 
 goTo.marker("type");
 verify.completionListContains("a", "a", "", "string");
