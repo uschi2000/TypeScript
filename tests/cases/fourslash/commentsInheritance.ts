@@ -260,8 +260,7 @@ verify.completions({
         { name: "i1_p1", text: "(property) c1.i1_p1: number", documentation: "i1_p1" },
         { name: "i1_f1", text: "(method) c1.i1_f1(): void", documentation: "i1_f1" },
         { name: "i1_l1", text: "(property) c1.i1_l1: () => void" },
-        { name: "i1_nc_p1", text: "", documentation: "" },
-        { name: "", text: "(property) c1.i1_nc_p1: number", },
+        { name: "i1_nc_p1", text: "(property) c1.i1_nc_p1: number" },
         { name: "i1_nc_f1", text: "(method) c1.i1_nc_f1(): void" },
         { name: "i1_nc_l1", text: "(property) c1.i1_nc_l1: () => void" },
         { name: "p1", text: "(property) c1.p1: number", documentation: "c1_p1" },
@@ -296,10 +295,10 @@ verify.quickInfos({
 verify.completions({
     marker: "11",
     includes: [
-        { name: "i1_p1", text: "(property) i1.i1_p1: numbe", documentation: "i1_p1" },
+        { name: "i1_p1", text: "(property) i1.i1_p1: number", documentation: "i1_p1" },
         { name: "i1_f1", text: "(method) i1.i1_f1(): void", documentation: "i1_f1" },
         { name: "i1_l1", text: "(property) i1.i1_l1: () => void" },
-        { name: "i1_nc_p1", text: "(property) i1.i1_nc_p1: numbe" },
+        { name: "i1_nc_p1", text: "(property) i1.i1_nc_p1: number" },
         { name: "i1_nc_f1", text: "(method) i1.i1_nc_f1(): void" },
         { name: "i1_nc_l1", text: "(property) i1.i1_nc_l1: () => void" },
         { name: "p1", text: "(property) i1.p1: number" },
@@ -338,7 +337,7 @@ verify.completions(
     },
     {
         marker: "16i",
-        includes: { name: "i1", text: "interface i1", documentation: "i1 is interface with propertie" },
+        includes: { name: "i1", text: "interface i1", documentation: "i1 is interface with properties" },
     },
 );
 

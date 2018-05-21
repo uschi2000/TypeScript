@@ -247,6 +247,7 @@ verify.signatureHelp({ marker: "13", docComment: "sum with property", parameterD
 verify.completions({
     marker: "13",
     includes: [{ name: "value", text: "(parameter) value: number", documentation: "this is value" }],
+    isNewIdentifierLocation: true,
 });
 
 verify.quickInfos({
