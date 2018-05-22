@@ -926,10 +926,7 @@ namespace ts.server {
                 // Ensure a ScriptInfo is created for new external files. This is performed indirectly
                 // by the LSHost for files in the program when the program is retrieved above but
                 // the program doesn't contain external files so this must be done explicitly.
-                inserted => {
-                    const scriptInfo = this.projectService.getOrCreateScriptInfoNotOpenedByClient(inserted, this.currentDirectory, this.directoryStructureHost)!;
-                    scriptInfo.attachToProject(this);
-                },
+                inserted => this.getOrCreateScriptInfoAndAttachToProject(inserted),
                 removed => this.detachScriptInfoFromProject(removed)
             );
             const elapsed = timestamp() - start;

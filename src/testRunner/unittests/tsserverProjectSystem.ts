@@ -1092,17 +1092,17 @@ namespace ts.projectSystem {
         });
 
         it("should disable features when the files are too large", () => {
-            const file1 = {
+            const file1: File = {
                 path: "/a/b/f1.js",
                 content: "let x =1;",
                 fileSize: 10 * 1024 * 1024
             };
-            const file2 = {
+            const file2: File = {
                 path: "/a/b/f2.js",
                 content: "let y =1;",
                 fileSize: 6 * 1024 * 1024
             };
-            const file3 = {
+            const file3: File = {
                 path: "/a/b/f3.js",
                 content: "let y =1;",
                 fileSize: 6 * 1024 * 1024
@@ -2651,19 +2651,16 @@ namespace ts.projectSystem {
         });
 
         it("language service disabled state is updated in external projects", () => {
-            const f1 = {
+            const f1: File = {
                 path: "/a/app.js",
                 content: "var x = 1"
             };
-            const f2 = {
+            const f2: File = {
                 path: "/a/largefile.js",
-                content: ""
+                content: "",
+                fileSize: server.maxProgramSizeForNonTsFiles + 1
             };
             const host = createServerHost([f1, f2]);
-            const originalGetFileSize = host.getFileSize;
-            host.getFileSize = (filePath: string) =>
-                filePath === f2.path ? server.maxProgramSizeForNonTsFiles + 1 : originalGetFileSize.call(host, filePath);
-
             const service = createProjectService(host);
             const projectFileName = "/a/proj.csproj";
 
@@ -2693,27 +2690,24 @@ namespace ts.projectSystem {
         });
 
         it("files are properly detached when language service is disabled", () => {
-            const f1 = {
+            const f1: File = {
                 path: "/a/app.js",
                 content: "var x = 1"
             };
-            const f2 = {
+            const f2: File = {
                 path: "/a/largefile.js",
-                content: ""
+                content: "",
+                fileSize: server.maxProgramSizeForNonTsFiles + 1
             };
-            const f3 = {
+            const f3: File = {
                 path: "/a/lib.js",
                 content: "var x = 1"
             };
-            const config = {
+            const config: File = {
                 path: "/a/tsconfig.json",
                 content: JSON.stringify({ compilerOptions: { allowJs: true } })
             };
             const host = createServerHost([f1, f2, f3, config]);
-            const originalGetFileSize = host.getFileSize;
-            host.getFileSize = (filePath: string) =>
-                filePath === f2.path ? server.maxProgramSizeForNonTsFiles + 1 : originalGetFileSize.call(host, filePath);
-
             const projectService = createProjectService(host);
             projectService.openClientFile(f1.path);
             projectService.checkNumberOfProjects({ configuredProjects: 1 });
@@ -2751,27 +2745,24 @@ namespace ts.projectSystem {
         });
 
         it("language service disabled events are triggered", () => {
-            const f1 = {
+            const f1: File = {
                 path: "/a/app.js",
                 content: "let x = 1;"
             };
-            const f2 = {
+            const f2: File = {
                 path: "/a/largefile.js",
-                content: ""
+                content: "",
+                fileSize: server.maxProgramSizeForNonTsFiles + 1
             };
-            const config = {
+            const config: File = {
                 path: "/a/jsconfig.json",
                 content: "{}"
             };
-            const configWithExclude = {
+            const configWithExclude: File = {
                 path: config.path,
                 content: JSON.stringify({ exclude: ["largefile.js"] })
             };
             const host = createServerHost([f1, f2, config]);
-            const originalGetFileSize = host.getFileSize;
-            host.getFileSize = (filePath: string) =>
-                filePath === f2.path ? server.maxProgramSizeForNonTsFiles + 1 : originalGetFileSize.call(host, filePath);
-
             let lastEvent!: server.ProjectLanguageServiceStateEvent;
             const session = createSession(host, {
                 canUseEvents: true,
@@ -2808,22 +2799,20 @@ namespace ts.projectSystem {
         });
 
         it("syntactic features work even if language service is disabled", () => {
-            const f1 = {
+            const f1: File = {
                 path: "/a/app.js",
                 content: "let x =   1;"
             };
-            const f2 = {
+            const f2: File = {
                 path: "/a/largefile.js",
-                content: ""
+                content: "",
+                fileSize: server.maxProgramSizeForNonTsFiles + 1
             };
-            const config = {
+            const config: File = {
                 path: "/a/jsconfig.json",
                 content: "{}"
             };
             const host = createServerHost([f1, f2, config]);
-            const originalGetFileSize = host.getFileSize;
-            host.getFileSize = (filePath: string) =>
-                filePath === f2.path ? server.maxProgramSizeForNonTsFiles + 1 : originalGetFileSize.call(host, filePath);
             let lastEvent!: server.ProjectLanguageServiceStateEvent;
             const session = createSession(host, {
                 canUseEvents: true,
@@ -8774,6 +8763,64 @@ export const x = 10;`
             assert.notEqual(moduleInfo.cacheSourceFile.sourceFile, sourceFile);
             assert.equal(project.getSourceFile(moduleInfo.path), moduleInfo.cacheSourceFile.sourceFile);
             assert.equal(moduleInfo.cacheSourceFile.sourceFile.text, updatedModuleContent);
+        });
+    });
+
+    describe("tsserverProjectSystem project size", () => {
+        it("when module included is larger than available size quota", () => {
+            const projectRoot = "/user/username/projects/project"
+            const app: File = {
+                path: `${projectRoot}/app.js`,
+                content: `import { a } from "./module"`,
+            };
+            const module: File = {
+                path: `${projectRoot}/module.js`,
+                content: "export const a = 1;",
+                fileSize: server.maxProgramSizeForNonTsFiles + 1
+            };
+            const config: File = {
+                path: `${projectRoot}/tsconfig.json`,
+                content: JSON.stringify({
+                    compilerOptions: { allowJs: true },
+                    files: ["./app.js"]
+                })
+            };
+            const files = [app, module, config];
+            const host = createServerHost(files);
+            const service = createProjectService(host);
+            service.openClientFile(app.path);
+            const project = service.configuredProjects.get(config.path)!;
+            assert.isFalse(project.languageServiceEnabled);
+        });
+
+        it("when opened large file", () => {
+            const projectRoot = "/user/username/projects/project"
+            const app: File = {
+                path: `${projectRoot}/app.js`,
+                content: `import { a } from "./module"`,
+                fileSize: server.maxProgramSizeForNonTsFiles + 1
+            };
+            const module: File = {
+                path: `${projectRoot}/module.js`,
+                content: "export const a = 1;",
+                fileSize: server.maxProgramSizeForNonTsFiles + 1
+            };
+            const config: File = {
+                path: `${projectRoot}/tsconfig.json`,
+                content: JSON.stringify({
+                    compilerOptions: { allowJs: true },
+                    files: ["./app.js"]
+                })
+            };
+            const files = [app, module, config];
+            const host = createServerHost(files);
+            const service = createProjectService(host);
+            service.openClientFile(app.path);
+            const project = service.configuredProjects.get(config.path)!;
+            assert.isFalse(project.languageServiceEnabled);
+            const program = project.getCurrentProgram();
+            // Module shouldnt be included in the program
+            assert.equal(program.getSourceFiles().map(f => f.fileName), [app.path]);
         });
     });
 }
