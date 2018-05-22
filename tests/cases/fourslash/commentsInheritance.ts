@@ -221,7 +221,7 @@
 ////}
 
 verify.completions({
-    marker: "1",
+    marker: ["1", "11"],
     includes: [
         { name: "i1_p1", text: "(property) i1.i1_p1: number", documentation: "i1_p1" },
         { name: "i1_f1", text: "(method) i1.i1_f1(): void", documentation: "i1_f1" },
@@ -292,23 +292,6 @@ verify.quickInfos({
     l10q: ["(property) c1.nc_l1: () => void", "c1_nc_l1"],
 });
 
-verify.completions({
-    marker: "11",
-    includes: [
-        { name: "i1_p1", text: "(property) i1.i1_p1: number", documentation: "i1_p1" },
-        { name: "i1_f1", text: "(method) i1.i1_f1(): void", documentation: "i1_f1" },
-        { name: "i1_l1", text: "(property) i1.i1_l1: () => void" },
-        { name: "i1_nc_p1", text: "(property) i1.i1_nc_p1: number" },
-        { name: "i1_nc_f1", text: "(method) i1.i1_nc_f1(): void" },
-        { name: "i1_nc_l1", text: "(property) i1.i1_nc_l1: () => void" },
-        { name: "p1", text: "(property) i1.p1: number" },
-        { name: "f1", text: "(method) i1.f1(): void" },
-        { name: "l1", text: "(property) i1.l1: () => void" },
-        { name: "nc_p1", text: "(property) i1.nc_p1: number" },
-        { name: "nc_f1", text: "(method) i1.nc_f1(): void" },
-        { name: "nc_l1", text: "(property) i1.nc_l1: () => void" },
-    ],
-});
 verify.signatureHelp(
     { marker: "12", docComment: "i1_f1" },
     { marker: ["13", "14", "15", "l12", "l13", "l14", "l15"], docComment: "" },
@@ -362,7 +345,7 @@ verify.quickInfos({
 });
 
 verify.completions({
-    marker: "19",
+    marker: ["19", "29"],
     includes: [
         { name: "c2_p1", text: "(property) c2.c2_p1: number", documentation: "c2 c2_p1" },
         { name: "c2_f1", text: "(method) c2.c2_f1(): void", documentation: "c2 c2_f1" },
@@ -421,23 +404,6 @@ verify.quickInfos({
     "28q": "(method) c3.nc_f1(): void"
 });
 
-verify.completions({
-    marker: "29",
-    includes: [
-        { name: "c2_p1", text: "(property) c2.c2_p1: number", documentation: "c2 c2_p1" },
-        { name: "c2_f1", text: "(method) c2.c2_f1(): void", documentation: "c2 c2_f1" },
-        { name: "c2_prop", text: "(property) c2.c2_prop: number", documentation: "c2 c2_prop" },
-        { name: "c2_nc_p1", text: "(property) c2.c2_nc_p1: number" },
-        { name: "c2_nc_f1", text: "(method) c2.c2_nc_f1(): void" },
-        { name: "c2_nc_prop", text: "(property) c2.c2_nc_prop: number", documentation: "" },
-        { name: "p1", text: "(property) c2.p1: number", documentation: "c2 p1" },
-        { name: "f1", text: "(method) c2.f1(): void", documentation: "c2 f1" },
-        { name: "prop", text: "(property) c2.prop: number", documentation: "c2 prop" },
-        { name: "nc_p1", text: "(property) c2.nc_p1: number" },
-        { name: "nc_f1", text: "(method) c2.nc_f1(): void" },
-        { name: "nc_prop", text: "(property) c2.nc_prop: number" },
-    ],
-});
 verify.signatureHelp(
     { marker: "30", docComment: "c2 c2_f1" },
     { marker: "32", docComment: "c2 f1" },
@@ -470,7 +436,7 @@ verify.completions(
         ],
     },
     {
-        marker: "36",
+        marker: ["36", "46"],
         includes: [
             { name: "i2_p1", text: "(property) i2.i2_p1: number", documentation: "i2_p1" },
             { name: "i2_f1", text: "(method) i2.i2_f1(): void", documentation: "i2_f1" },
@@ -540,23 +506,6 @@ verify.quickInfos({
     l45q: "(property) i3.nc_l1: () => void"
 });
 
-verify.completions({
-    marker: "46",
-    includes: [
-        { name: "i2_p1", text: "(property) i2.i2_p1: number", documentation: "i2_p1" },
-        { name: "i2_f1", text: "(method) i2.i2_f1(): void", documentation: "i2_f1" },
-        { name: "i2_l1", text: "(property) i2.i2_l1: () => void" },
-        { name: "i2_nc_p1", text: "(property) i2.i2_nc_p1: number" },
-        { name: "i2_nc_f1", text: "(method) i2.i2_nc_f1(): void" },
-        { name: "i2_nc_l1", text: "(property) i2.i2_nc_l1: () => void" },
-        { name: "p1", text: "(property) i2.p1: number", documentation: "i2 p1" },
-        { name: "f1", text: "(method) i2.f1(): void", documentation: "i2 f1" },
-        { name: "l1", text: "(property) i2.l1: () => void" },
-        { name: "nc_p1", text: "(property) i2.nc_p1: number" },
-        { name: "nc_f1", text: "(method) i2.nc_f1(): void" },
-        { name: "nc_l1", text: "(property) i2.nc_l1: () => void" },
-    ],
-});
 verify.signatureHelp(
     { marker: "47", docComment: "i2_f1" },
     { marker: "49", docComment: "i2 f1" },
