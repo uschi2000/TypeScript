@@ -78,14 +78,20 @@ verify.quickInfos({
     7: "var i2_i_x: number"
 });
 
-goTo.marker('8');
-verify.quickInfoIs("(property) i2.x: number", "this is x");
-verify.completionListContains("x", "(property) i2.x: number", "this is x");
-verify.completionListContains("foo", "(property) i2.foo: (b: number) => string", "this is foo");
-verify.completionListContains("nc_x", "(property) i2.nc_x: number", "");
-verify.completionListContains("nc_foo", "(property) i2.nc_foo: (b: number) => string", "");
-verify.completionListContains("fnfoo", "(method) i2.fnfoo(b: number): string", "this is fnfoo");
-verify.completionListContains("nc_fnfoo", "(method) i2.nc_fnfoo(b: number): string", "");
+verify.quickInfoAt("8", "(property) i2.x: number", "this is x");
+verify.completions({
+    marker: "8",
+    exact: [
+        { name: "x", text: "(property) i2.x: number", documentation: "this is x" },
+        { name: "foo", text: "(property) i2.foo: (b: number) => string", documentation: "this is foo" },
+        { name: "nc_x", text: "(property) i2.nc_x: number" },
+        { name: "nc_foo", text: "(property) i2.nc_foo: (b: number) => string" },
+        { name: "fnfoo", text: "(method) i2.fnfoo(b: number): string", documentation: "this is fnfoo" },
+        { name: "nc_fnfoo", text: "(method) i2.nc_fnfoo(b: number): string" },
+        "apply", "call", "bind", "toString", "prototype", "length", "arguments", "caller",
+    ],
+    isNewIdentifierLocation: true,
+});
 
 verify.quickInfos({
     9: "var i2_i_foo: (b: number) => string",

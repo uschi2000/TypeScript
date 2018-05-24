@@ -23,23 +23,11 @@
 ////d./*1*/
 ////D./*2*/
 
-goTo.marker('1');
-verify.completionListContains('foo');
-verify.completionListContains('foo2');
-verify.not.completionListContains('bar');
-verify.not.completionListContains('bar2');
-verify.not.completionListContains('baz');
-verify.not.completionListContains('x');
-
+verify.completions({ marker: "1", exact: ["foo2", "foo"] });
 edit.insert('foo()');
-
-goTo.marker('2');
-verify.not.completionListContains('foo');
-verify.not.completionListContains('foo2');
-verify.completionListContains('bar');
-verify.completionListContains('bar2');
-verify.completionListContains('baz');
-verify.completionListContains('x');
+verify.completions({
+    marker: "2",
+    exact: ["prototype", "bar2", "bar", "baz", "x", "apply", "call", "bind", "toString", "length", "arguments", "caller"],
+});
 edit.insert('bar()');
-
 verify.noErrors();
