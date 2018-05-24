@@ -200,15 +200,7 @@ declare namespace FourSlashInterface {
     class verify extends verifyNegatable {
         assertHasRanges(ranges: Range[]): void;
         caretAtMarker(markerName?: string): void;
-        completions(...options: {
-            readonly marker?: ArrayOrSingle<string>,
-            readonly isNewIdentifierLocation?: boolean;
-            readonly exact?: ArrayOrSingle<ExpectedCompletionEntry>;
-            readonly includes?: ArrayOrSingle<ExpectedCompletionEntry>;
-            readonly excludes?: ArrayOrSingle<string | { name: string, source: string }>;
-            readonly preferences?: UserPreferences;
-            readonly triggerCharacter?: string;
-        }[]): void;
+        completions(...options: CompletionsOptions[]): void;
         completionsAt(markerName: ArrayOrSingle<string>, completions: ReadonlyArray<ExpectedCompletionEntry>, options?: CompletionsAtOptions): void;
         applyCodeActionFromCompletion(markerName: string, options: {
             name: string,
@@ -535,6 +527,15 @@ declare namespace FourSlashInterface {
     interface CompletionsAtOptions extends UserPreferences {
         triggerCharacter?: string;
         isNewIdentifierLocation?: boolean;
+    }
+    interface CompletionsOptions {
+        readonly marker?: ArrayOrSingle<string>,
+        readonly isNewIdentifierLocation?: boolean;
+        readonly exact?: ArrayOrSingle<ExpectedCompletionEntry>;
+        readonly includes?: ArrayOrSingle<ExpectedCompletionEntry>;
+        readonly excludes?: ArrayOrSingle<string | { name: string, source: string }>;
+        readonly preferences?: UserPreferences;
+        readonly triggerCharacter?: string;
     }
     type ExpectedCompletionEntry = string | {
         readonly name: string,

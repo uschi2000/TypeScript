@@ -1,5 +1,7 @@
 ///<reference path="fourslash.ts" />
 
+// @noLib: true
+
 ////abstract class B {
 ////    private privateMethod() { }
 ////    protected protectedMethod() { };
@@ -114,149 +116,117 @@
 ////}
 ////class O extends B {
 ////    constructor(public a) {
-////    }, 
+////    },
 ////    /*classElementAfterConstructorSeparatedByComma*/
 ////}
 
-const allowedKeywordCount = verify.allowedClassElementKeywords.length;
-type CompletionInfo = [string, string];
-type CompletionInfoVerifier = { validMembers: CompletionInfo[], invalidMembers: CompletionInfo[] };
+const getValue: FourSlashInterface.ExpectedCompletionEntry = { name: "getValue", text: "(method) B.getValue(): number" };
+const getValue1: FourSlashInterface.ExpectedCompletionEntry = { name: "getValue1", text: "(method) D1.getValue1(): number" };
+const protectedMethod: FourSlashInterface.ExpectedCompletionEntry = { name: "protectedMethod", text: "(method) B.protectedMethod(): void" };
+const protectedMethodD2: FourSlashInterface.ExpectedCompletionEntry = { name: "protectedMethod", text: "(method) D2.protectedMethod(): void" };
+const privateMethod: FourSlashInterface.ExpectedCompletionEntry = { name: "privateMethod", text: "(method) B.privateMethod(): void" };
+const staticMethod: FourSlashInterface.ExpectedCompletionEntry = { name: "staticMethod", text: "(method) B.staticMethod(): void" };
+const allMembers: ReadonlyArray<FourSlashInterface.ExpectedCompletionEntry> = [getValue, getValue1, protectedMethod, privateMethod, staticMethod];
+const allMemberNames: ReadonlyArray<string> = ["getValue", "getValue1", "protectedMethod", "privateMethod", "staticMethod"];
 
-function verifyClassElementLocations({ validMembers, invalidMembers }: CompletionInfoVerifier, classElementCompletionLocations: string[]) {
-    for (const marker of classElementCompletionLocations) {
-        goTo.marker(marker);
-        verifyCompletionInfo(validMembers, verify);
-        verifyCompletionInfo(invalidMembers, verify.not);
-        verify.completionListContainsClassElementKeywords();
-        verify.completionListCount(allowedKeywordCount + validMembers.length);
+function includeExclude(...included: string[]): Pick<FourSlashInterface.CompletionsOptions, "includes" | "excludes"> {
+    ts.Debug.assert(included.every(i => allMemberNames.includes(i)));
+    return {
+        includes: allMembers.filter(m => included.includes(typeof m === "string" ? m : m.name)),
+        excludes: allMemberNames.filter(m => !included.includes(m)),
     }
 }
 
-function verifyCompletionInfo(memberInfo: CompletionInfo[], verify: FourSlashInterface.verifyNegatable) {
-    for (const [symbol, text] of memberInfo) {
-        verify.completionListContains(symbol, text, /*documentation*/ undefined, "method");
+verify.completions(
+    {
+        // Not a class element declaration location
+        marker: "InsideMethod",
+        excludes: allMemberNames,
+    },
+    {
+        // Only keywords allowed at this position since they dont extend the class or are private
+        marker: [
+            "abstractClass",
+            "classThatDoesNotExtendAnotherClass",
+            "classThatHasWrittenPrivateKeyword",
+            "classElementContainingPrivateStatic",
+            "classThatStartedWritingIdentifierAfterPrivateModifier",
+            "classThatStartedWritingIdentifierAfterPrivateStaticModifier",
+        ],
+        exact: ["private", "protected", "public", "static", "abstract", "async", "constructor", "get", "readonly", "set"],
+        isNewIdentifierLocation: true,
+    },
+    {
+        // Instance base members and class member keywords allowed
+        marker:[
+            "classThatIsEmptyAndExtendingAnotherClass",
+            "classThatHasDifferentMethodThanBase",
+            "classThatHasDifferentMethodThanBaseAfterMethod",
+            "classThatHasWrittenPublicKeyword",
+            "classThatStartedWritingIdentifier",
+            "propDeclarationWithoutSemicolon",
+            "propDeclarationWithSemicolon",
+            "propAssignmentWithSemicolon",
+            "propAssignmentWithoutSemicolon",
+            "methodSignatureWithoutSemicolon",
+            "methodSignatureWithSemicolon",
+            "methodImplementation",
+            "accessorSignatureWithoutSemicolon",
+            "accessorSignatureImplementation",
+            "classThatHasWrittenGetKeyword",
+            "classThatHasWrittenSetKeyword",
+            "classThatStartedWritingIdentifierOfGetAccessor",
+            "classThatStartedWritingIdentifierOfSetAccessor",
+            "classThatStartedWritingIdentifierAfterModifier",
+            "classThatHasWrittenAsyncKeyword",
+            "classElementAfterConstructorSeparatedByComma",
+        ],
+        ...includeExclude("getValue", "protectedMethod"),
+        isNewIdentifierLocation: true,
+    },
+    {
+        // Static Base members and class member keywords allowed
+        marker: ["classElementContainingStatic", "classThatStartedWritingIdentifierAfterStaticModifier"],
+        ...includeExclude("staticMethod"),
+        isNewIdentifierLocation: true,
+    },
+    {
+        marker: [
+            "classThatHasAlreadyImplementedAnotherClassMethod",
+            "classThatHasAlreadyImplementedAnotherClassMethodAfterMethod",
+        ],
+        ...includeExclude("protectedMethod"),
+        isNewIdentifierLocation: true,
+    },
+    {
+        marker: [
+            "classThatHasAlreadyImplementedAnotherClassProtectedMethod",
+            "classThatHasDifferentMethodThanBaseAfterProtectedMethod",
+        ],
+        ...includeExclude("getValue"),
+        isNewIdentifierLocation: true,
+    },
+    {
+        // instance memebers in D1 and base class are shown
+        marker: "classThatExtendsClassExtendingAnotherClass",
+        ...includeExclude("getValue", "protectedMethod", "getValue1"),
+        isNewIdentifierLocation: true,
+    },
+    {
+        // instance memebers in D2 and base class are shown
+        TODO: DO THIS BETTER
+        marker: "classThatExtendsClassExtendingAnotherClassWithOverridingMember",
+        includes: [getValue, protectedMethodD2],
+        excludes: ["privateMethod", "staticMethod"],
+        isNewIdentifierLocation: true,
+    },
+    {
+        // static base members and class member keywords allowed
+        marker: [
+            "classThatExtendsClassExtendingAnotherClassAndTypesStatic",
+            "classThatExtendsClassExtendingAnotherClassWithOverridingMemberAndTypesStatic"
+        ],
+        ...includeExclude("staticMethod"),
+        isNewIdentifierLocation: true,
     }
-}
-
-const allMembersOfBase: CompletionInfo[] = [
-    ["getValue", "(method) B.getValue(): number"],
-    ["protectedMethod", "(method) B.protectedMethod(): void"],
-    ["privateMethod", "(method) B.privateMethod(): void"],
-    ["staticMethod", "(method) B.staticMethod(): void"]
-];
-const publicCompletionInfoOfD1: CompletionInfo[] = [
-    ["getValue1", "(method) D1.getValue1(): number"]
-];
-const publicCompletionInfoOfD2: CompletionInfo[] = [
-    ["protectedMethod", "(method) D2.protectedMethod(): void"]
-];
-function filterCompletionInfo(fn: (a: CompletionInfo) => boolean): CompletionInfoVerifier {
-    const validMembers: CompletionInfo[] = [];
-    const invalidMembers: CompletionInfo[] = [];
-    for (const member of allMembersOfBase) {
-        if (fn(member)) {
-            validMembers.push(member);
-        }
-        else {
-            invalidMembers.push(member);
-        }
-    }
-    return { validMembers, invalidMembers };
-}
-
-
-const instanceMemberInfo = filterCompletionInfo(([a]: CompletionInfo) => a === "getValue" || a === "protectedMethod");
-const staticMemberInfo = filterCompletionInfo(([a]: CompletionInfo) => a === "staticMethod");
-const instanceWithoutProtectedMemberInfo = filterCompletionInfo(([a]: CompletionInfo) => a === "getValue");
-const instanceWithoutPublicMemberInfo = filterCompletionInfo(([a]: CompletionInfo) => a === "protectedMethod");
-
-const instanceMemberInfoD1: CompletionInfoVerifier = {
-    validMembers: instanceMemberInfo.validMembers.concat(publicCompletionInfoOfD1),
-    invalidMembers: instanceMemberInfo.invalidMembers
-};
-const instanceMemberInfoD2: CompletionInfoVerifier = {
-    validMembers: instanceWithoutProtectedMemberInfo.validMembers.concat(publicCompletionInfoOfD2),
-    invalidMembers: instanceWithoutProtectedMemberInfo.invalidMembers
-};
-const staticMemberInfoDn: CompletionInfoVerifier = {
-    validMembers: staticMemberInfo.validMembers,
-    invalidMembers: staticMemberInfo.invalidMembers.concat(publicCompletionInfoOfD1, publicCompletionInfoOfD2)
-};
-
-// Not a class element declaration location
-const nonClassElementMarkers = [
-    "InsideMethod"
-];
-for (const marker of nonClassElementMarkers) {
-    goTo.marker(marker);
-    verifyCompletionInfo(allMembersOfBase, verify.not);
-    verify.not.completionListIsEmpty();
-}
-
-// Only keywords allowed at this position since they dont extend the class or are private
-const onlyClassElementKeywordLocations = [
-    "abstractClass",
-    "classThatDoesNotExtendAnotherClass",
-    "classThatHasWrittenPrivateKeyword",
-    "classElementContainingPrivateStatic",
-    "classThatStartedWritingIdentifierAfterPrivateModifier",
-    "classThatStartedWritingIdentifierAfterPrivateStaticModifier"
-];
-verifyClassElementLocations({ validMembers: [], invalidMembers: allMembersOfBase }, onlyClassElementKeywordLocations);
-
-// Instance base members and class member keywords allowed
-const classInstanceElementLocations = [
-    "classThatIsEmptyAndExtendingAnotherClass",
-    "classThatHasDifferentMethodThanBase",
-    "classThatHasDifferentMethodThanBaseAfterMethod",
-    "classThatHasWrittenPublicKeyword",
-    "classThatStartedWritingIdentifier",
-    "propDeclarationWithoutSemicolon",
-    "propDeclarationWithSemicolon",
-    "propAssignmentWithSemicolon",
-    "propAssignmentWithoutSemicolon",
-    "methodSignatureWithoutSemicolon",
-    "methodSignatureWithSemicolon",
-    "methodImplementation",
-    "accessorSignatureWithoutSemicolon",
-    "accessorSignatureImplementation",
-    "classThatHasWrittenGetKeyword",
-    "classThatHasWrittenSetKeyword",
-    "classThatStartedWritingIdentifierOfGetAccessor",
-    "classThatStartedWritingIdentifierOfSetAccessor",
-    "classThatStartedWritingIdentifierAfterModifier",
-    "classThatHasWrittenAsyncKeyword",
-    "classElementAfterConstructorSeparatedByComma"
-];
-verifyClassElementLocations(instanceMemberInfo, classInstanceElementLocations);
-
-// Static Base members and class member keywords allowed
-const staticClassLocations = [
-    "classElementContainingStatic",
-    "classThatStartedWritingIdentifierAfterStaticModifier"
-];
-verifyClassElementLocations(staticMemberInfo, staticClassLocations);
-
-const classInstanceElementWithoutPublicMethodLocations = [
-    "classThatHasAlreadyImplementedAnotherClassMethod",
-    "classThatHasAlreadyImplementedAnotherClassMethodAfterMethod",
-];
-verifyClassElementLocations(instanceWithoutPublicMemberInfo, classInstanceElementWithoutPublicMethodLocations);
-
-const classInstanceElementWithoutProtectedMethodLocations = [
-    "classThatHasAlreadyImplementedAnotherClassProtectedMethod",
-    "classThatHasDifferentMethodThanBaseAfterProtectedMethod",
-];
-verifyClassElementLocations(instanceWithoutProtectedMemberInfo, classInstanceElementWithoutProtectedMethodLocations);
-
-// instance memebers in D1 and base class are shown
-verifyClassElementLocations(instanceMemberInfoD1, ["classThatExtendsClassExtendingAnotherClass"]);
-
-// instance memebers in D2 and base class are shown
-verifyClassElementLocations(instanceMemberInfoD2, ["classThatExtendsClassExtendingAnotherClassWithOverridingMember"]);
-
-// static base members and class member keywords allowed
-verifyClassElementLocations(staticMemberInfoDn, [
-    "classThatExtendsClassExtendingAnotherClassAndTypesStatic",
-    "classThatExtendsClassExtendingAnotherClassWithOverridingMemberAndTypesStatic"
-]);
+);

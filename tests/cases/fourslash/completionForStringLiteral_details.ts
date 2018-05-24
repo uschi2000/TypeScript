@@ -17,11 +17,14 @@
 ////declare const o: I;
 ////o["/*prop*/"];
 
-verify.completions({ marker: "path", includes: { name: "other", text: "other", kind: "script" }, isNewIdentifierLocation: true });
-
-goTo.marker("type");
-verify.completionListContains("a", "a", "", "string");
-
-goTo.marker("prop");
-verify.completionListContains("x", "(property) I.x: number", "Prop doc ", "property");
-verify.completionListContains("m", "(method) I.m(): void", "Method doc ", "method");
+verify.completions(
+    { marker: "path", includes: { name: "other", text: "other", kind: "script" }, isNewIdentifierLocation: true },
+    { marker: "type", exact: { name: "a", text: "a", kind: "string" } },
+    {
+        marker: "prop",
+        exact: [
+            { name: "x", text: "(property) I.x: number", documentation: "Prop doc ", kind: "property" },
+            { name: "m", text: "(method) I.m(): void", documentation: "Method doc ", kind: "method" },
+        ],
+    },
+);
