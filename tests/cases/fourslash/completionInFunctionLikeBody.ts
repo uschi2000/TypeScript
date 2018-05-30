@@ -12,32 +12,10 @@
 ////     }
 ////     /*4*/
 //// }
-    
 
-goTo.marker("1");
-verify.not.completionListContains("public", "public", /*documentation*/ undefined, "keyword");
-verify.not.completionListContains("private", "private", /*documentation*/ undefined, "keyword");
-verify.not.completionListContains("protected", "protected", /*documentation*/ undefined, "keyword");
-verify.not.completionListContains("constructor", "constructor", /*documentation*/ undefined, "keyword");
-verify.not.completionListContains("readonly", "readonly", /*documentation*/ undefined, "keyword");
-verify.not.completionListContains("static", "static", /*documentation*/ undefined, "keyword");
-verify.not.completionListContains("abstract", "abstract", /*documentation*/ undefined, "keyword");
-verify.not.completionListContains("get", "get", /*documentation*/ undefined, "keyword");
-verify.not.completionListContains("set", "set", /*documentation*/ undefined, "keyword");
+verify.completions({
+    marker: ["1", "2"],
+    excludes: ["public", "private", "protected", "constructor", "readonly", "static", "abstract", "get", "set"],
+});
 
-goTo.marker("2");
-verify.not.completionListContains("public", "public", /*documentation*/ undefined, "keyword");
-verify.not.completionListContains("private", "private", /*documentation*/ undefined, "keyword");
-verify.not.completionListContains("protected", "protected", /*documentation*/ undefined, "keyword");
-verify.not.completionListContains("constructor", "constructor", /*documentation*/ undefined, "keyword");
-verify.not.completionListContains("readonly", "readonly", /*documentation*/ undefined, "keyword");
-verify.not.completionListContains("static", "static", /*documentation*/ undefined, "keyword");
-verify.not.completionListContains("abstract", "abstract", /*documentation*/ undefined, "keyword");
-verify.not.completionListContains("get", "get", /*documentation*/ undefined, "keyword");
-verify.not.completionListContains("set", "set", /*documentation*/ undefined, "keyword");
-
-goTo.marker("3");
-verify.completionListContainsClassElementKeywords();
-
-goTo.marker("4");
-verify.completionListContainsClassElementKeywords();
+goTo.eachMarker(["3", "4"], () => verify.completionListContainsClassElementKeywords());
