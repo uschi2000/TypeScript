@@ -7,5 +7,7 @@
 ////
 ////fnc1./**/
 
-goTo.marker();
-verify.completionListContains('arguments', '(property) Function.arguments: any');
+verify.completions({
+    marker: "",
+    exact: ["apply", "call", "bind", "toString", "prototype", "length", { name: "arguments", text: "(property) Function.arguments: any" }, "caller"],
+});

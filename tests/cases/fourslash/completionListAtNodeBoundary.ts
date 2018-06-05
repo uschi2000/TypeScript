@@ -17,6 +17,5 @@
 ////var a: string[];
 ////var e = a.map(x => x./**/);
 
-
-goTo.marker();
-verify.completionListContains("charAt");
+// TODO: GH#24690
+verify.completions({ marker: "", includes: "charAt", isNewIdentifierLocation: true });

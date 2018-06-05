@@ -3,4 +3,5 @@
 //// if(0 === ''.
 
 goTo.eof();
-verify.completionListContains("charAt");
+// TODO: GH#24690
+verify.completions({ includes: "charAt", isNewIdentifierLocation: true });
