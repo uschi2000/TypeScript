@@ -116,6 +116,7 @@ namespace ts.server {
 
         readonly trace?: (s: string) => void;
         readonly realpath?: (path: string) => string;
+        readonly getFileSize?: (path: string) => number;
 
         /*@internal*/
         hasInvalidatedResolution: HasInvalidatedResolution;
@@ -198,7 +199,6 @@ namespace ts.server {
             readonly projectService: ProjectService,
             private documentRegistry: DocumentRegistry,
             hasExplicitListOfFiles: boolean,
-            lastFileExceededProgramSize: string | undefined,
             private compilerOptions: CompilerOptions,
             public compileOnSaveEnabled: boolean,
             directoryStructureHost: DirectoryStructureHost,
@@ -233,12 +233,13 @@ namespace ts.server {
                 this.realpath = path => host.realpath!(path);
             }
 
+            if (host.getFileSize) {
+                this.getFileSize = path => host.getFileSize!(path);
+            }
+
             // Use the current directory as resolution root only if the project created using current directory string
             this.resolutionCache = createResolutionCache(this, currentDirectory && this.currentDirectory, /*logChangesWhenResolvingModule*/ true);
             this.languageService = createLanguageService(this, this.documentRegistry, projectService.syntaxOnly);
-            if (lastFileExceededProgramSize) {
-                this.disableLanguageService(lastFileExceededProgramSize);
-            }
             this.markAsDirty();
             this.projectService.pendingEnsureProjectForOpenFiles = true;
         }
@@ -282,7 +283,7 @@ namespace ts.server {
 
             let result: string[] | undefined;
             this.rootFilesMap.forEach(value => {
-                if (this.languageServiceEnabled || (isScriptInfo(value) && value.isScriptOpen())) {
+                if (this.languageServiceEnabled) {
                     // if language service is disabled - process only files that are open
                     (result || (result = [])).push(isScriptInfo(value) ? value.fileName : value);
                 }
@@ -493,6 +494,16 @@ namespace ts.server {
             return !emitSkipped;
         }
 
+        getMaxNonTsProgramSize() {
+            this.projectService.projectToSizeMap.set(this.getProjectName(), 0);
+            if (this.compilerOptions.disableSizeLimit) {
+                return;
+            }
+            let availableSpace = maxProgramSizeForNonTsFiles;
+            this.projectService.projectToSizeMap.forEach(val => (availableSpace -= (val || 0)));
+            return availableSpace;
+        }
+
         enableLanguageService() {
             if (this.languageServiceEnabled || this.projectService.syntaxOnly) {
                 return;
@@ -502,16 +513,16 @@ namespace ts.server {
             this.projectService.onUpdateLanguageServiceStateForProject(this, /*languageServiceEnabled*/ true);
         }
 
-        disableLanguageService(lastFileExceededProgramSize?: string) {
+        disableLanguageService(sizeExceededInfo: ProgramSizeInformation) {
             if (!this.languageServiceEnabled) {
                 return;
             }
             Debug.assert(!this.projectService.syntaxOnly);
             this.languageService.cleanupSemanticCache();
             this.languageServiceEnabled = false;
-            this.lastFileExceededProgramSize = lastFileExceededProgramSize;
+            this.lastFileExceededProgramSize = sizeExceededInfo.lastFileExceededProgramSize;
+            this.log(`Non TS file size exceeded limit (${sizeExceededInfo.totalNonTsFileSize}). Largest files: ${sizeExceededInfo.largestFiles!.map(file => `${file.fileName}:${file.size}`).join(", ")}`);
             this.builderState = undefined;
-            this.resolutionCache.closeTypeRootsWatch();
             this.projectService.onUpdateLanguageServiceStateForProject(this, /*languageServiceEnabled*/ false);
         }
 
@@ -630,10 +641,6 @@ namespace ts.server {
         }
 
         getScriptInfos(): ScriptInfo[] {
-            if (!this.languageServiceEnabled) {
-                // if language service is not enabled - return just root files
-                return this.rootFiles;
-            }
             return map(this.program.getSourceFiles(), sourceFile => {
                 const scriptInfo = this.projectService.getScriptInfoForPath(sourceFile.resolvedPath || sourceFile.path);
                 Debug.assert(!!scriptInfo, "getScriptInfo", () => `scriptInfo for a file '${sourceFile.fileName}' Path: '${sourceFile.path}' / '${sourceFile.resolvedPath}' is missing.`);
@@ -650,17 +657,6 @@ namespace ts.server {
                 return [];
             }
 
-            if (!this.languageServiceEnabled) {
-                // if language service is disabled assume that all files in program are root files + default library
-                let rootFiles = this.getRootFiles();
-                if (this.compilerOptions) {
-                    const defaultLibrary = getDefaultLibFilePath(this.compilerOptions);
-                    if (defaultLibrary) {
-                        (rootFiles || (rootFiles = [])).push(asNormalizedPath(defaultLibrary));
-                    }
-                }
-                return rootFiles;
-            }
             const result: NormalizedPath[] = [];
             for (const f of this.program.getSourceFiles()) {
                 if (excludeFilesFromExternalLibraries && this.program.isSourceFileFromExternalLibrary(f)) {
@@ -683,7 +679,7 @@ namespace ts.server {
         }
 
         hasConfigFile(configFilePath: NormalizedPath) {
-            if (this.program && this.languageServiceEnabled) {
+            if (this.program) {
                 const configFile = this.program.getCompilerOptions().configFile;
                 if (configFile) {
                     if (configFilePath === asNormalizedPath(configFile.fileName)) {
@@ -915,8 +911,17 @@ namespace ts.server {
                 );
 
                 // Watch the type locations that would be added to program as part of automatic type resolutions
-                if (this.languageServiceEnabled) {
-                    this.resolutionCache.updateTypeRootsWatch();
+                this.resolutionCache.updateTypeRootsWatch();
+
+                const programSizeInfo = this.program.getSizeExceededInformation();
+                if (programSizeInfo && programSizeInfo.lastFileExceededProgramSize) {
+                    this.disableLanguageService(programSizeInfo);
+                }
+                else {
+                    if (programSizeInfo) {
+                        this.projectService.projectToSizeMap.set(this.getProjectName(), programSizeInfo.totalNonTsFileSize);
+                    }
+                    this.enableLanguageService();
                 }
             }
 
@@ -1216,7 +1221,6 @@ namespace ts.server {
                 documentRegistry,
                 // TODO: GH#18217
                 /*files*/ undefined!,
-                /*lastFileExceededProgramSize*/ undefined,
                 compilerOptions,
                 /*compileOnSaveEnabled*/ false,
                 projectService.host,
@@ -1303,7 +1307,6 @@ namespace ts.server {
             documentRegistry: DocumentRegistry,
             hasExplicitListOfFiles: boolean,
             compilerOptions: CompilerOptions,
-            lastFileExceededProgramSize: string | undefined,
             public compileOnSaveEnabled: boolean,
             cachedDirectoryStructureHost: CachedDirectoryStructureHost,
             private projectReferences: ReadonlyArray<ProjectReference> | undefined) {
@@ -1312,7 +1315,6 @@ namespace ts.server {
                 projectService,
                 documentRegistry,
                 hasExplicitListOfFiles,
-                lastFileExceededProgramSize,
                 compilerOptions,
                 compileOnSaveEnabled,
                 cachedDirectoryStructureHost,
@@ -1507,7 +1509,6 @@ namespace ts.server {
             projectService: ProjectService,
             documentRegistry: DocumentRegistry,
             compilerOptions: CompilerOptions,
-            lastFileExceededProgramSize: string | undefined,
             public compileOnSaveEnabled: boolean,
             projectFilePath?: string) {
             super(externalProjectName,
@@ -1515,7 +1516,6 @@ namespace ts.server {
                 projectService,
                 documentRegistry,
                 /*hasExplicitListOfFiles*/ true,
-                lastFileExceededProgramSize,
                 compilerOptions,
                 compileOnSaveEnabled,
                 projectService.host,

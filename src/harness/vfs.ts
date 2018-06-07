@@ -1181,7 +1181,6 @@ namespace vfs {
         getAccessibleFileSystemEntries(path: string): ts.FileSystemEntries;
         directoryExists(path: string): boolean;
         fileExists(path: string): boolean;
-        getFileSize(path: string): number;
         readFile(path: string): string | undefined;
         getWorkspaceRoot(): string;
     }
@@ -1197,7 +1196,7 @@ namespace vfs {
                     return { mode: S_IFDIR | 0o777, size: 0 };
                 }
                 else if (host.fileExists(path)) {
-                    return { mode: S_IFREG | 0o666, size: host.getFileSize(path) };
+                    return { mode: S_IFREG | 0o666, size: host.readFile(path)!.length };
                 }
                 else {
                     throw new Error("ENOENT: path does not exist");

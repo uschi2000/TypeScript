@@ -605,16 +605,6 @@ namespace ts {
                     }
                     return process.memoryUsage().heapUsed;
                 },
-                getFileSize(path) {
-                    try {
-                        const stat = _fs.statSync(path);
-                        if (stat.isFile()) {
-                            return stat.size;
-                        }
-                    }
-                    catch { /*ignore*/ }
-                    return 0;
-                },
                 exit(exitCode?: number): void {
                     process.exit(exitCode);
                 },

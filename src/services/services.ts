@@ -1233,6 +1233,9 @@ namespace ts {
                     return host.resolveTypeReferenceDirectives!(typeReferenceDirectiveNames, containingFile);
                 };
             }
+            if (host.getFileSize) {
+                compilerHost.getFileSize = path => host.getFileSize!(path);
+            }
 
             const documentRegistryBucketKey = documentRegistry.getKeyForCompilationSettings(newSettings);
             const options: CreateProgramOptions = {
@@ -1240,7 +1243,8 @@ namespace ts {
                 options: newSettings,
                 host: compilerHost,
                 oldProgram: program,
-                projectReferences: hostCache.getProjectReferences()
+                projectReferences: hostCache.getProjectReferences(),
+                maxNonTsProgramSize: host.getMaxNonTsProgramSize && host.getMaxNonTsProgramSize()
             };
             program = createProgram(options);
 
@@ -1255,7 +1259,9 @@ namespace ts {
 
             // Make sure all the nodes in the program are both bound, and have their parent
             // pointers set property.
-            program.getTypeChecker();
+            if (!program.exceedsSizeLimit()) {
+                program.getTypeChecker();
+            }
             return;
 
             function fileExists(fileName: string): boolean {

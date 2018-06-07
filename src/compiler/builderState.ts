@@ -76,6 +76,8 @@ namespace ts.BuilderState {
     function getReferencedFiles(program: Program, sourceFile: SourceFile, getCanonicalFileName: GetCanonicalFileName): Map<true> | undefined {
         let referencedFiles: Map<true> | undefined;
 
+        if (program.exceedsSizeLimit()) { return; }
+
         // We need to use a set here since the code can contain the same import twice,
         // but that will only be one dependency.
         // To avoid invernal conversion, the key of the referencedFiles map must be of type Path

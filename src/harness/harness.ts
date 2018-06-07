@@ -477,7 +477,6 @@ namespace Harness {
         getCurrentDirectory(): string;
         useCaseSensitiveFileNames(): boolean;
         resolvePath(path: string): string | undefined;
-        getFileSize(path: string): number;
         readFile(path: string): string | undefined;
         writeFile(path: string, contents: string): void;
         directoryName(path: string): string | undefined;
@@ -604,7 +603,6 @@ namespace Harness {
             getCurrentDirectory: () => ts.sys.getCurrentDirectory(),
             useCaseSensitiveFileNames: () => ts.sys.useCaseSensitiveFileNames,
             resolvePath: (path: string) => ts.sys.resolvePath(path),
-            getFileSize: (path: string) => ts.sys.getFileSize!(path),
             readFile: path => ts.sys.readFile(path),
             writeFile: (path, content) => ts.sys.writeFile(path, content),
             directoryName,
@@ -856,11 +854,6 @@ namespace Harness {
             return HttpResponseMessage.hasSuccessStatusCode(response) && response.content ? response.content.content : undefined;
         }
 
-        function getFileSize(path: string): number {
-            const response = send(HttpRequestMessage.head(new URL(path, serverRoot)));
-            return HttpResponseMessage.hasSuccessStatusCode(response) ? +response.headers.get("Content-Length")!.toString() : 0;
-        }
-
         function readFile(path: string): string | undefined {
             const response = send(HttpRequestMessage.get(new URL(path, serverRoot)));
             return HttpResponseMessage.hasSuccessStatusCode(response) && response.content ? response.content.content : undefined;
@@ -930,7 +923,6 @@ namespace Harness {
             getCurrentDirectory: () => "",
             useCaseSensitiveFileNames,
             resolvePath,
-            getFileSize,
             readFile,
             writeFile,
             directoryName: Utils.memoize(directoryName, path => path),

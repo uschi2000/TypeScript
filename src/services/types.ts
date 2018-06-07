@@ -231,6 +231,8 @@ namespace ts {
 
         isKnownTypesPackageName?(name: string): boolean;
         installPackage?(options: InstallPackageOptions): Promise<ApplyCodeActionCommandResult>;
+        getMaxNonTsProgramSize?(): number | undefined;
+        getFileSize?(path: string): number;
     }
 
     export interface UserPreferences {

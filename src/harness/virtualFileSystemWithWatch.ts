@@ -336,13 +336,25 @@ interface Array<T> {}`
         private readonly currentDirectory: string;
         private readonly dynamicPriorityWatchFile: HostWatchFile | undefined;
         private readonly customRecursiveWatchDirectory: HostWatchDirectory | undefined;
+        getFileSize?: (s: string) => number;
 
-        constructor(public withSafeList: boolean, public useCaseSensitiveFileNames: boolean, executingFilePath: string, currentDirectory: string, fileOrFolderorSymLinkList: ReadonlyArray<FileOrFolderOrSymLink>, public readonly newLine = "\n", public readonly useWindowsStylePath?: boolean, private readonly environmentVariables?: Map<string>) {
+        constructor(public withSafeList: boolean, public useCaseSensitiveFileNames: boolean, executingFilePath: string, currentDirectory: string, fileOrFolderOrSymLinkList: ReadonlyArray<FileOrFolderOrSymLink>, public readonly newLine = "\n", public readonly useWindowsStylePath?: boolean, private readonly environmentVariables?: Map<string>) {
             this.getCanonicalFileName = createGetCanonicalFileName(useCaseSensitiveFileNames);
             this.toPath = s => toPath(s, currentDirectory, this.getCanonicalFileName);
             this.executingFilePath = this.getHostSpecificPath(executingFilePath);
             this.currentDirectory = this.getHostSpecificPath(currentDirectory);
-            this.reloadFS(fileOrFolderorSymLinkList);
+            if (fileOrFolderOrSymLinkList.find(f => (f as File).fileSize !== undefined)) {
+                // Implement file size only if we are testing it
+                this.getFileSize = s => {
+                    const path = this.toFullPath(s);
+                    const entry = this.fs.get(path)!;
+                    if (isFsFile(entry)) {
+                        return entry.fileSize ? entry.fileSize : entry.content.length;
+                    }
+                    return undefined!; // TODO: GH#18217
+                };
+            }
+            this.reloadFS(fileOrFolderOrSymLinkList);
             this.dynamicPriorityWatchFile = this.environmentVariables && this.environmentVariables.get("TSC_WATCHFILE") === "DynamicPriorityPolling" ?
                 createDynamicPriorityPollingWatchFile(this) :
                 undefined;
@@ -755,15 +767,6 @@ interface Array<T> {}`
         readFile(s: string): string | undefined {
             const fsEntry = this.getRealFile(this.toFullPath(s));
             return fsEntry ? fsEntry.content : undefined;
-        }
-
-        getFileSize(s: string) {
-            const path = this.toFullPath(s);
-            const entry = this.fs.get(path)!;
-            if (isFsFile(entry)) {
-                return entry.fileSize ? entry.fileSize : entry.content.length;
-            }
-            return undefined!; // TODO: GH#18217
         }
 
         directoryExists(s: string) {

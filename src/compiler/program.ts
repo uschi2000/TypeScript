@@ -506,13 +506,14 @@ namespace ts {
         );
     }
 
-    function createCreateProgramOptions(rootNames: ReadonlyArray<string>, options: CompilerOptions, host?: CompilerHost, oldProgram?: Program, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>): CreateProgramOptions {
+    function createCreateProgramOptions(rootNames: ReadonlyArray<string>, options: CompilerOptions, host?: CompilerHost, oldProgram?: Program, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>, maxNonTsProgramSize?: number): CreateProgramOptions {
         return {
             rootNames,
             options,
             host,
             oldProgram,
-            configFileParsingDiagnostics
+            configFileParsingDiagnostics,
+            maxNonTsProgramSize
         };
     }
 
@@ -541,9 +542,9 @@ namespace ts {
      * @param configFileParsingDiagnostics - error during config file parsing
      * @returns A 'Program' object.
      */
-    export function createProgram(rootNames: ReadonlyArray<string>, options: CompilerOptions, host?: CompilerHost, oldProgram?: Program, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>): Program;
-    export function createProgram(rootNamesOrOptions: ReadonlyArray<string> | CreateProgramOptions, _options?: CompilerOptions, _host?: CompilerHost, _oldProgram?: Program, _configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>): Program {
-        const createProgramOptions = isArray(rootNamesOrOptions) ? createCreateProgramOptions(rootNamesOrOptions, _options!, _host, _oldProgram, _configFileParsingDiagnostics) : rootNamesOrOptions; // TODO: GH#18217
+    export function createProgram(rootNames: ReadonlyArray<string>, options: CompilerOptions, host?: CompilerHost, oldProgram?: Program, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>, maxNonTsProgramSize?: number): Program;
+    export function createProgram(rootNamesOrOptions: ReadonlyArray<string> | CreateProgramOptions, _options?: CompilerOptions, _host?: CompilerHost, _oldProgram?: Program, _configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>, _maxNonTsProgramSize?: number): Program {
+        const createProgramOptions = isArray(rootNamesOrOptions) ? createCreateProgramOptions(rootNamesOrOptions, _options!, _host, _oldProgram, _configFileParsingDiagnostics, _maxNonTsProgramSize) : rootNamesOrOptions; // TODO: GH#18217
         const { rootNames, options, configFileParsingDiagnostics, projectReferences } = createProgramOptions;
         let { oldProgram } = createProgramOptions;
 
@@ -639,6 +640,7 @@ namespace ts {
         // stores 'filename -> file association' ignoring case
         // used to track cases when two file names differ only in casing
         const filesByNameIgnoreCase = host.useCaseSensitiveFileNames() ? createMap<SourceFile>() : undefined;
+        let programSizeInformation: ProgramSizeInformation | undefined;
 
         // A parallel array to projectReferences storing the results of reading in the referenced tsconfig files
         let resolvedProjectReferences: (ResolvedProjectReference | undefined)[] | undefined = projectReferences ? [] : undefined;
@@ -718,7 +720,6 @@ namespace ts {
 
         // unconditionally set oldProgram to undefined to prevent it from being captured in closure
         oldProgram = undefined;
-
         program = {
             getRootFileNames: () => rootNames,
             getSourceFile,
@@ -738,8 +739,8 @@ namespace ts {
             getCommonSourceDirectory,
             emit,
             getCurrentDirectory: () => currentDirectory,
-            getNodeCount: () => getDiagnosticsProducingTypeChecker().getNodeCount(),
-            getIdentifierCount: () => getDiagnosticsProducingTypeChecker().getIdentifierCount(),
+            getNodeCount: () => sum(files, "nodeCount"),
+            getIdentifierCount: () => sum(files, "identifierCount"),
             getSymbolCount: () => getDiagnosticsProducingTypeChecker().getSymbolCount(),
             getTypeCount: () => getDiagnosticsProducingTypeChecker().getTypeCount(),
             getFileProcessingDiagnostics: () => fileProcessingDiagnostics,
@@ -754,14 +755,67 @@ namespace ts {
             isEmittedFile,
             getConfigFileParsingDiagnostics,
             getResolvedModuleWithFailedLookupLocationsFromCache,
-            getProjectReferences
+            getProjectReferences,
+            exceedsSizeLimit: () => !!programSizeInformation && !!programSizeInformation.lastFileExceededProgramSize,
+            getSizeExceededInformation: () => programSizeInformation
         };
 
         verifyCompilerOptions();
+        if (exceedsSizeLimit()) {
+            program.getSymbolCount = program.getTypeCount = () => 0;
+        }
         performance.mark("afterProgram");
         performance.measure("Program", "beforeProgram", "afterProgram");
 
         return program;
+
+        function exceedsSizeLimit() {
+            if (options.disableSizeLimit) {
+                return;
+            }
+
+            let maxNonTsProgramSize = createProgramOptions.maxNonTsProgramSize;
+            if (maxNonTsProgramSize === undefined) {
+                if (!options.allowJs && !options.resolveJsonModule) {
+                    return;
+                }
+
+                // Set default if allow js or resolve json module
+                maxNonTsProgramSize = maxProgramSizeForNonTsFiles;
+            }
+
+            let totalNonTsFileSize = 0;
+            let lastFileExceededProgramSize: string | undefined;
+            for (const f of files) {
+                if (hasTypeScriptFileExtension(f.fileName)) {
+                    continue;
+                }
+                totalNonTsFileSize += host.getFileSize ? host.getFileSize(f.fileName) : f.text.length;
+                if (totalNonTsFileSize > maxNonTsProgramSize && lastFileExceededProgramSize === undefined) {
+                    lastFileExceededProgramSize = f.fileName;
+                }
+            }
+            if (!!lastFileExceededProgramSize) {
+                Debug.assert(totalNonTsFileSize > maxNonTsProgramSize);
+                const largestFiles = files.filter(f => !hasTypeScriptFileExtension(f.fileName))
+                    .map(f => ({ fileName: f.fileName, size: f.text.length }))
+                    .sort((a, b) => b.size - a.size)
+                    .slice(0, 5);
+                programDiagnostics.add(createCompilerDiagnosticFromMessageChain(chainDiagnosticMessages(
+                    chainDiagnosticMessages(
+                        chainDiagnosticMessages(/*details*/ undefined, Diagnostics.Last_file_seen_when_checking_size_Colon_0, lastFileExceededProgramSize),
+                        Diagnostics.Largest_non_TypeScript_files_Colon_0,
+                        `${largestFiles.map(file => `${file.fileName}:${file.size}`).join(", ")}"`
+                    ),
+                    Diagnostics.Non_TypeScript_file_size_0_exceeded_limit_1,
+                    totalNonTsFileSize.toString(),
+                    maxNonTsProgramSize.toString()
+                )));
+                programSizeInformation = { lastFileExceededProgramSize, largestFiles, totalNonTsFileSize, maxNonTsProgramSize };
+                return true;
+            }
+            programSizeInformation = { totalNonTsFileSize, maxNonTsProgramSize };
+        }
 
         function compareDefaultLibFiles(a: SourceFile, b: SourceFile) {
             return compareValues(getDefaultLibFilePriority(a), getDefaultLibFilePriority(b));
@@ -813,6 +867,7 @@ namespace ts {
         }
 
         function getClassifiableNames() {
+            throwIfProgramExceededSizeLimit(program);
             if (!classifiableNames) {
                 // Initialize a checker so that all our files are bound.
                 getTypeChecker();
@@ -1302,6 +1357,7 @@ namespace ts {
         }
 
         function getDiagnosticsProducingTypeChecker() {
+            throwIfProgramExceededSizeLimit(program);
             return diagnosticsProducingTypeChecker || (diagnosticsProducingTypeChecker = createTypeChecker(program, /*produceDiagnostics:*/ true));
         }
 
@@ -1310,10 +1366,12 @@ namespace ts {
         }
 
         function getTypeChecker() {
+            throwIfProgramExceededSizeLimit(program);
             return noDiagnosticsTypeChecker || (noDiagnosticsTypeChecker = createTypeChecker(program, /*produceDiagnostics:*/ false));
         }
 
         function emit(sourceFile?: SourceFile, writeFileCallback?: WriteFileCallback, cancellationToken?: CancellationToken, emitOnlyDtsFiles?: boolean, transformers?: CustomTransformers): EmitResult {
+            throwIfProgramExceededSizeLimit(program);
             return runWithCancellationToken(() => emitWorker(program, sourceFile, writeFileCallback, cancellationToken, emitOnlyDtsFiles, transformers));
         }
 
@@ -1410,10 +1468,12 @@ namespace ts {
         }
 
         function getSemanticDiagnostics(sourceFile: SourceFile, cancellationToken: CancellationToken): ReadonlyArray<Diagnostic> {
+            throwIfProgramExceededSizeLimit(program);
             return getDiagnosticsHelper(sourceFile, getSemanticDiagnosticsForFile, cancellationToken);
         }
 
         function getDeclarationDiagnostics(sourceFile: SourceFile, cancellationToken: CancellationToken): ReadonlyArray<DiagnosticWithLocation> {
+            throwIfProgramExceededSizeLimit(program);
             const options = program.getCompilerOptions();
             // collect diagnostics from the program only once if either no source file was specified or out/outFile is set (bundled emit)
             if (!sourceFile || options.out || options.outFile) {
@@ -1500,6 +1560,7 @@ namespace ts {
         }
 
         function getSuggestionDiagnostics(sourceFile: SourceFile, cancellationToken: CancellationToken): ReadonlyArray<DiagnosticWithLocation> {
+            throwIfProgramExceededSizeLimit(program);
             return runWithCancellationToken(() => {
                 return getDiagnosticsProducingTypeChecker().getSuggestionDiagnostics(sourceFile, cancellationToken);
             });
@@ -1767,6 +1828,7 @@ namespace ts {
         }
 
         function getGlobalDiagnostics(): Diagnostic[] {
+            throwIfProgramExceededSizeLimit(program);
             return sortAndDeduplicateDiagnostics(getDiagnosticsProducingTypeChecker().getGlobalDiagnostics().slice());
         }
 

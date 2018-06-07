@@ -2475,6 +2475,18 @@ declare namespace ts {
         isEmittedFile(file: string): boolean;
         getResolvedModuleWithFailedLookupLocationsFromCache(moduleName: string, containingFile: string): ResolvedModuleWithFailedLookupLocations | undefined;
         getProjectReferences(): (ResolvedProjectReference | undefined)[] | undefined;
+        exceedsSizeLimit(): boolean;
+        getSizeExceededInformation(): ProgramSizeInformation | undefined;
+    }
+    interface ProgramSizeInformation {
+        lastFileExceededProgramSize?: string;
+        largestFiles?: ReadonlyArray<LargeFileSizeInformation>;
+        totalNonTsFileSize: number;
+        maxNonTsProgramSize: number;
+    }
+    interface LargeFileSizeInformation {
+        fileName: string;
+        size: number;
     }
     interface ResolvedProjectReference {
         commandLine: ParsedCommandLine;
@@ -2680,8 +2692,6 @@ declare namespace ts {
         getDiagnostics(sourceFile?: SourceFile, cancellationToken?: CancellationToken): Diagnostic[];
         getGlobalDiagnostics(): Diagnostic[];
         getEmitResolver(sourceFile?: SourceFile, cancellationToken?: CancellationToken): EmitResolver;
-        getNodeCount(): number;
-        getIdentifierCount(): number;
         getSymbolCount(): number;
         getTypeCount(): number;
         isArrayLikeType(type: Type): boolean;
@@ -3810,6 +3820,7 @@ declare namespace ts {
         host?: CompilerHost;
         oldProgram?: Program;
         configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>;
+        maxNonTsProgramSize?: number;
     }
     interface CommandLineOptionBase {
         name: string;
@@ -4072,6 +4083,7 @@ declare namespace ts {
         getModifiedTime?(fileName: string): Date;
         setModifiedTime?(fileName: string, date: Date): void;
         deleteFile?(fileName: string): void;
+        getFileSize?(path: string): number;
     }
     enum TransformFlags {
         None = 0,
@@ -5721,6 +5733,9 @@ declare namespace ts {
         Option_build_must_be_the_first_command_line_argument: DiagnosticMessage;
         Options_0_and_1_cannot_be_combined: DiagnosticMessage;
         Skipping_clean_because_not_all_projects_could_be_located: DiagnosticMessage;
+        Non_TypeScript_file_size_0_exceeded_limit_1: DiagnosticMessage;
+        Largest_non_TypeScript_files_Colon_0: DiagnosticMessage;
+        Last_file_seen_when_checking_size_Colon_0: DiagnosticMessage;
         Variable_0_implicitly_has_an_1_type: DiagnosticMessage;
         Parameter_0_implicitly_has_an_1_type: DiagnosticMessage;
         Member_0_implicitly_has_an_1_type: DiagnosticMessage;
@@ -5978,6 +5993,7 @@ declare namespace ts {
     const resolvingEmptyArray: never[];
     const emptyMap: ReadonlyMap<never>;
     const emptyUnderscoreEscapedMap: ReadonlyUnderscoreEscapedMap<never>;
+    const maxProgramSizeForNonTsFiles: number;
     const externalHelpersModuleNameText = "tslib";
     function getDeclarationOfKind<T extends Declaration>(symbol: Symbol, kind: T["kind"]): T | undefined;
     /** Create a new escaped identifier map. */
@@ -6588,6 +6604,9 @@ declare namespace ts {
     function addToSeen(seen: Map<true>, key: string | number): boolean;
     function addToSeen<T>(seen: Map<T>, key: string | number, value: T): boolean;
     function isObjectTypeDeclaration(node: Node): node is ObjectTypeDeclaration;
+    function throwIfProgramExceededSizeLimit(program: {
+        exceedsSizeLimit(): boolean;
+    }): void;
 }
 declare namespace ts {
     function getDefaultLibFileName(options: CompilerOptions): string;
@@ -8918,7 +8937,7 @@ declare namespace ts {
      * @param configFileParsingDiagnostics - error during config file parsing
      * @returns A 'Program' object.
      */
-    function createProgram(rootNames: ReadonlyArray<string>, options: CompilerOptions, host?: CompilerHost, oldProgram?: Program, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>): Program;
+    function createProgram(rootNames: ReadonlyArray<string>, options: CompilerOptions, host?: CompilerHost, oldProgram?: Program, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>, maxNonTsProgramSize?: number): Program;
     function parseConfigHostFromCompilerHost(host: CompilerHost): ParseConfigFileHost;
     /**
      * Returns the target config filename of a project reference
@@ -9058,7 +9077,7 @@ declare namespace ts {
         oldProgram: BuilderProgram | undefined;
         configFileParsingDiagnostics: ReadonlyArray<Diagnostic>;
     }
-    function getBuilderCreationParameters(newProgramOrRootNames: Program | ReadonlyArray<string> | undefined, hostOrOptions: BuilderProgramHost | CompilerOptions | undefined, oldProgramOrHost?: BuilderProgram | CompilerHost, configFileParsingDiagnosticsOrOldProgram?: ReadonlyArray<Diagnostic> | BuilderProgram, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>): BuilderCreationParameters;
+    function getBuilderCreationParameters(newProgramOrRootNames: Program | ReadonlyArray<string> | undefined, hostOrOptions: BuilderProgramHost | CompilerOptions | undefined, oldProgramOrHost: BuilderProgram | CompilerHost | undefined, configFileParsingDiagnosticsOrOldProgram: ReadonlyArray<Diagnostic> | BuilderProgram | undefined, configFileParsingDiagnostics: ReadonlyArray<Diagnostic> | undefined, maxNonTsProgramSize: number | undefined): BuilderCreationParameters;
     function createBuilderProgram(kind: BuilderProgramKind.SemanticDiagnosticsBuilderProgram, builderCreationParameters: BuilderCreationParameters): SemanticDiagnosticsBuilderProgram;
     function createBuilderProgram(kind: BuilderProgramKind.EmitAndSemanticDiagnosticsBuilderProgram, builderCreationParameters: BuilderCreationParameters): EmitAndSemanticDiagnosticsBuilderProgram;
 }
@@ -9148,6 +9167,10 @@ declare namespace ts {
          * Get the current directory of the program
          */
         getCurrentDirectory(): string;
+        /**
+         * returns true if program exceeds size
+         */
+        exceedsSizeLimit(): boolean;
     }
     /**
      * The builder that caches the semantic diagnostics for the program and handles the changed files and affected files
@@ -9175,18 +9198,18 @@ declare namespace ts {
      * Create the builder to manage semantic diagnostics and cache them
      */
     function createSemanticDiagnosticsBuilderProgram(newProgram: Program, host: BuilderProgramHost, oldProgram?: SemanticDiagnosticsBuilderProgram, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>): SemanticDiagnosticsBuilderProgram;
-    function createSemanticDiagnosticsBuilderProgram(rootNames: ReadonlyArray<string> | undefined, options: CompilerOptions | undefined, host?: CompilerHost, oldProgram?: SemanticDiagnosticsBuilderProgram, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>): SemanticDiagnosticsBuilderProgram;
+    function createSemanticDiagnosticsBuilderProgram(rootNames: ReadonlyArray<string> | undefined, options: CompilerOptions | undefined, host?: CompilerHost, oldProgram?: SemanticDiagnosticsBuilderProgram, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>, maxNonTsProgramSize?: number): SemanticDiagnosticsBuilderProgram;
     /**
      * Create the builder that can handle the changes in program and iterate through changed files
      * to emit the those files and manage semantic diagnostics cache as well
      */
     function createEmitAndSemanticDiagnosticsBuilderProgram(newProgram: Program, host: BuilderProgramHost, oldProgram?: EmitAndSemanticDiagnosticsBuilderProgram, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>): EmitAndSemanticDiagnosticsBuilderProgram;
-    function createEmitAndSemanticDiagnosticsBuilderProgram(rootNames: ReadonlyArray<string> | undefined, options: CompilerOptions | undefined, host?: CompilerHost, oldProgram?: EmitAndSemanticDiagnosticsBuilderProgram, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>): EmitAndSemanticDiagnosticsBuilderProgram;
+    function createEmitAndSemanticDiagnosticsBuilderProgram(rootNames: ReadonlyArray<string> | undefined, options: CompilerOptions | undefined, host?: CompilerHost, oldProgram?: EmitAndSemanticDiagnosticsBuilderProgram, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>, maxNonTsProgramSize?: number): EmitAndSemanticDiagnosticsBuilderProgram;
     /**
      * Creates a builder thats just abstraction over program and can be used with watch
      */
     function createAbstractBuilder(newProgram: Program, host: BuilderProgramHost, oldProgram?: BuilderProgram, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>): BuilderProgram;
-    function createAbstractBuilder(rootNames: ReadonlyArray<string> | undefined, options: CompilerOptions | undefined, host?: CompilerHost, oldProgram?: BuilderProgram, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>): BuilderProgram;
+    function createAbstractBuilder(rootNames: ReadonlyArray<string> | undefined, options: CompilerOptions | undefined, host?: CompilerHost, oldProgram?: BuilderProgram, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>, maxNonTsProgramSize?: number): BuilderProgram;
 }
 declare namespace ts {
     /** This is the cache of module/typedirectives resolution that can be retained across program */
@@ -9266,6 +9289,7 @@ declare namespace ts {
         getSemanticDiagnostics(): ReadonlyArray<Diagnostic>;
         getConfigFileParsingDiagnostics(): ReadonlyArray<Diagnostic>;
         emit(): EmitResult;
+        exceedsSizeLimit(): boolean;
     }
     type ReportEmitErrorSummary = (errorCount: number) => void;
     /**
@@ -9284,7 +9308,7 @@ declare namespace ts {
 declare namespace ts {
     type WatchStatusReporter = (diagnostic: Diagnostic, newLine: string, options: CompilerOptions) => void;
     /** Create the program with rootNames and options, if they are undefined, oldProgram and new configFile diagnostics create new program */
-    type CreateProgram<T extends BuilderProgram> = (rootNames: ReadonlyArray<string> | undefined, options: CompilerOptions | undefined, host?: CompilerHost, oldProgram?: T, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>) => T;
+    type CreateProgram<T extends BuilderProgram> = (rootNames: ReadonlyArray<string> | undefined, options: CompilerOptions | undefined, host?: CompilerHost, oldProgram?: T, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>, maxNonTsProgramSize?: number) => T;
     interface WatchCompilerHost<T extends BuilderProgram> {
         /**
          * Used to create the program when need for program creation or recreation detected
@@ -9335,6 +9359,8 @@ declare namespace ts {
         setTimeout?(callback: (...args: any[]) => void, ms: number, ...args: any[]): any;
         /** If provided, will be used to reset existing delayed compilation */
         clearTimeout?(timeoutId: any): void;
+        /** If present used as limit for the maxNonTsProgramSize */
+        getMaxNonTsProgramSize?(): number;
     }
     /** Internal interface used to wire emit through same host */
     interface WatchCompilerHost<T extends BuilderProgram> {
@@ -9917,6 +9943,8 @@ declare namespace ts {
         getCustomTransformers?(): CustomTransformers | undefined;
         isKnownTypesPackageName?(name: string): boolean;
         installPackage?(options: InstallPackageOptions): Promise<ApplyCodeActionCommandResult>;
+        getMaxNonTsProgramSize?(): number | undefined;
+        getFileSize?(path: string): number;
     }
     interface UserPreferences {
         readonly disableSuggestions?: boolean;
@@ -13453,6 +13481,7 @@ declare namespace ts.server {
         languageServiceEnabled: boolean;
         readonly trace?: (s: string) => void;
         readonly realpath?: (path: string) => string;
+        readonly getFileSize?: (path: string) => number;
         hasInvalidatedResolution: HasInvalidatedResolution;
         resolutionCache: ResolutionCache;
         private builderState;
@@ -13471,7 +13500,7 @@ declare namespace ts.server {
         readonly currentDirectory: string;
         directoryStructureHost: DirectoryStructureHost;
         readonly getCanonicalFileName: GetCanonicalFileName;
-        constructor(projectName: string, projectKind: ProjectKind, projectService: ProjectService, documentRegistry: DocumentRegistry, hasExplicitListOfFiles: boolean, lastFileExceededProgramSize: string | undefined, compilerOptions: CompilerOptions, compileOnSaveEnabled: boolean, directoryStructureHost: DirectoryStructureHost, currentDirectory: string | undefined);
+        constructor(projectName: string, projectKind: ProjectKind, projectService: ProjectService, documentRegistry: DocumentRegistry, hasExplicitListOfFiles: boolean, compilerOptions: CompilerOptions, compileOnSaveEnabled: boolean, directoryStructureHost: DirectoryStructureHost, currentDirectory: string | undefined);
         isKnownTypesPackageName(name: string): boolean;
         installPackage(options: InstallPackageOptions): Promise<ApplyCodeActionCommandResult>;
         private readonly typingsCache;
@@ -13514,8 +13543,9 @@ declare namespace ts.server {
         private shouldEmitFile;
         getCompileOnSaveAffectedFileList(scriptInfo: ScriptInfo): string[];
         emitFile(scriptInfo: ScriptInfo, writeFile: (path: string, data: string, writeByteOrderMark?: boolean) => void): boolean;
+        getMaxNonTsProgramSize(): number | undefined;
         enableLanguageService(): void;
-        disableLanguageService(lastFileExceededProgramSize?: string): void;
+        disableLanguageService(sizeExceededInfo: ProgramSizeInformation): void;
         getProjectName(): string;
         abstract getTypeAcquisition(): TypeAcquisition;
         protected removeLocalTypingsFromTypeAcquisition(newTypeAcquisition: TypeAcquisition): TypeAcquisition;
@@ -13589,7 +13619,7 @@ declare namespace ts.server {
         configFileSpecs: ConfigFileSpecs | undefined;
         private externalProjectRefCount;
         private projectErrors;
-        constructor(configFileName: NormalizedPath, projectService: ProjectService, documentRegistry: DocumentRegistry, hasExplicitListOfFiles: boolean, compilerOptions: CompilerOptions, lastFileExceededProgramSize: string | undefined, compileOnSaveEnabled: boolean, cachedDirectoryStructureHost: CachedDirectoryStructureHost, projectReferences: ReadonlyArray<ProjectReference> | undefined);
+        constructor(configFileName: NormalizedPath, projectService: ProjectService, documentRegistry: DocumentRegistry, hasExplicitListOfFiles: boolean, compilerOptions: CompilerOptions, compileOnSaveEnabled: boolean, cachedDirectoryStructureHost: CachedDirectoryStructureHost, projectReferences: ReadonlyArray<ProjectReference> | undefined);
         updateGraph(): boolean;
         getCachedDirectoryStructureHost(): CachedDirectoryStructureHost;
         getConfigFilePath(): NormalizedPath;
@@ -13615,7 +13645,7 @@ declare namespace ts.server {
         compileOnSaveEnabled: boolean;
         excludedFiles: ReadonlyArray<NormalizedPath>;
         private typeAcquisition;
-        constructor(externalProjectName: string, projectService: ProjectService, documentRegistry: DocumentRegistry, compilerOptions: CompilerOptions, lastFileExceededProgramSize: string | undefined, compileOnSaveEnabled: boolean, projectFilePath?: string);
+        constructor(externalProjectName: string, projectService: ProjectService, documentRegistry: DocumentRegistry, compilerOptions: CompilerOptions, compileOnSaveEnabled: boolean, projectFilePath?: string);
         getExcludedFiles(): ReadonlyArray<NormalizedPath>;
         getTypeAcquisition(): TypeAcquisition;
         setTypeAcquisition(newTypeAcquisition: TypeAcquisition): void;
@@ -13764,7 +13794,7 @@ declare namespace ts.server {
         private readonly openFilesWithNonRootedDiskPath;
         private compilerOptionsForInferredProjects;
         private compilerOptionsForInferredProjectsPerProjectRoot;
-        private readonly projectToSizeMap;
+        readonly projectToSizeMap: Map<number>;
         private readonly configFileExistenceInfoCache;
         private readonly throttledOperations;
         private readonly hostConfiguration;
@@ -13843,7 +13873,6 @@ declare namespace ts.server {
         private getConfiguredProjectByCanonicalConfigFilePath;
         private findExternalProjectByProjectName;
         private convertConfigFileContentToProjectOptions;
-        private getFilenameForExceededTotalSizeLimitForNonTsFiles;
         private createExternalProject;
         private sendProjectTelemetry;
         private addFilesToNonInferredProjectAndUpdateGraph;

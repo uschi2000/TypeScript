@@ -172,14 +172,13 @@ namespace ts {
         const host = createCompilerHost(options);
         enableStatistics(options);
 
-        const programOptions: CreateProgramOptions = {
+        const program = createProgram({
             rootNames,
             options,
             projectReferences,
             host,
             configFileParsingDiagnostics
-        };
-        const program = createProgram(programOptions);
+        });
         const exitStatus = emitFilesAndReportErrors(program, reportDiagnostic, s => sys.write(s + sys.newLine));
         reportStatistics(program);
         return sys.exit(exitStatus);
@@ -187,12 +186,12 @@ namespace ts {
 
     function updateWatchCompilationHost(watchCompilerHost: WatchCompilerHost<EmitAndSemanticDiagnosticsBuilderProgram>) {
         const compileUsingBuilder = watchCompilerHost.createProgram;
-        watchCompilerHost.createProgram = (rootNames, options, host, oldProgram, configFileParsingDiagnostics) => {
+        watchCompilerHost.createProgram = (rootNames, options, host, oldProgram, configFileParsingDiagnostics, maxNonTsProgramSize) => {
             Debug.assert(rootNames !== undefined || (options === undefined && !!oldProgram));
             if (options !== undefined) {
                 enableStatistics(options);
             }
-            return compileUsingBuilder(rootNames, options, host, oldProgram, configFileParsingDiagnostics);
+            return compileUsingBuilder(rootNames, options, host, oldProgram, configFileParsingDiagnostics, maxNonTsProgramSize);
         };
         const emitFilesUsingBuilder = watchCompilerHost.afterProgramCreate!; // TODO: GH#18217
         watchCompilerHost.afterProgramCreate = builderProgram => {

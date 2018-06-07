@@ -117,6 +117,7 @@ namespace ts {
      * eg. if during diagnostics check cancellation token ends up cancelling the request, the affected file should be retained
      */
     function getNextAffectedFile(state: BuilderProgramState, cancellationToken: CancellationToken | undefined, computeHash: BuilderState.ComputeHash): SourceFile | Program | undefined {
+        throwIfProgramExceededSizeLimit(state.program);
         while (true) {
             const { affectedFiles } = state;
             if (affectedFiles) {
@@ -220,7 +221,7 @@ namespace ts {
         configFileParsingDiagnostics: ReadonlyArray<Diagnostic>;
     }
 
-    export function getBuilderCreationParameters(newProgramOrRootNames: Program | ReadonlyArray<string> | undefined, hostOrOptions: BuilderProgramHost | CompilerOptions | undefined, oldProgramOrHost?: BuilderProgram | CompilerHost, configFileParsingDiagnosticsOrOldProgram?: ReadonlyArray<Diagnostic> | BuilderProgram, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>): BuilderCreationParameters {
+    export function getBuilderCreationParameters(newProgramOrRootNames: Program | ReadonlyArray<string> | undefined, hostOrOptions: BuilderProgramHost | CompilerOptions | undefined, oldProgramOrHost: BuilderProgram | CompilerHost | undefined, configFileParsingDiagnosticsOrOldProgram: ReadonlyArray<Diagnostic> | BuilderProgram | undefined, configFileParsingDiagnostics: ReadonlyArray<Diagnostic> | undefined, maxNonTsProgramSize: number | undefined): BuilderCreationParameters {
         let host: BuilderProgramHost;
         let newProgram: Program;
         let oldProgram: BuilderProgram;
@@ -233,7 +234,7 @@ namespace ts {
         }
         else if (isArray(newProgramOrRootNames)) {
             oldProgram = configFileParsingDiagnosticsOrOldProgram as BuilderProgram;
-            newProgram = createProgram(newProgramOrRootNames, hostOrOptions as CompilerOptions, oldProgramOrHost as CompilerHost, oldProgram && oldProgram.getProgram(), configFileParsingDiagnostics);
+            newProgram = createProgram(newProgramOrRootNames, hostOrOptions as CompilerOptions, oldProgramOrHost as CompilerHost, oldProgram && oldProgram.getProgram(), configFileParsingDiagnostics, maxNonTsProgramSize);
             host = oldProgramOrHost as CompilerHost;
         }
         else {
@@ -284,7 +285,8 @@ namespace ts {
             getSemanticDiagnostics,
             emit,
             getAllDependencies: sourceFile => BuilderState.getAllDependencies(state, state.program, sourceFile),
-            getCurrentDirectory: () => state.program.getCurrentDirectory()
+            getCurrentDirectory: () => state.program.getCurrentDirectory(),
+            exceedsSizeLimit: () => state.program.exceedsSizeLimit()
         };
 
         if (kind === BuilderProgramKind.SemanticDiagnosticsBuilderProgram) {
@@ -332,6 +334,7 @@ namespace ts {
          * in that order would be used to write the files
          */
         function emit(targetSourceFile?: SourceFile, writeFile?: WriteFileCallback, cancellationToken?: CancellationToken, emitOnlyDtsFiles?: boolean, customTransformers?: CustomTransformers): EmitResult {
+            throwIfProgramExceededSizeLimit(state.program);
             if (kind === BuilderProgramKind.EmitAndSemanticDiagnosticsBuilderProgram) {
                 assertSourceFileOkWithoutNextAffectedCall(state, targetSourceFile);
                 if (!targetSourceFile) {
@@ -403,6 +406,7 @@ namespace ts {
          * it will iterate through all the affected files, to ensure that cache stays valid and yet provide a way to get all semantic diagnostics
          */
         function getSemanticDiagnostics(sourceFile?: SourceFile, cancellationToken?: CancellationToken): ReadonlyArray<Diagnostic> {
+            throwIfProgramExceededSizeLimit(state.program);
             assertSourceFileOkWithoutNextAffectedCall(state, sourceFile);
             const compilerOptions = state.program.getCompilerOptions();
             if (compilerOptions.outFile || compilerOptions.out) {
@@ -519,6 +523,10 @@ namespace ts {
          * Get the current directory of the program
          */
         getCurrentDirectory(): string;
+        /**
+         * returns true if program exceeds size
+         */
+        exceedsSizeLimit(): boolean;
     }
 
     /**
@@ -549,9 +557,9 @@ namespace ts {
      * Create the builder to manage semantic diagnostics and cache them
      */
     export function createSemanticDiagnosticsBuilderProgram(newProgram: Program, host: BuilderProgramHost, oldProgram?: SemanticDiagnosticsBuilderProgram, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>): SemanticDiagnosticsBuilderProgram;
-    export function createSemanticDiagnosticsBuilderProgram(rootNames: ReadonlyArray<string> | undefined, options: CompilerOptions | undefined, host?: CompilerHost, oldProgram?: SemanticDiagnosticsBuilderProgram, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>): SemanticDiagnosticsBuilderProgram;
-    export function createSemanticDiagnosticsBuilderProgram(newProgramOrRootNames: Program | ReadonlyArray<string> | undefined, hostOrOptions: BuilderProgramHost | CompilerOptions | undefined, oldProgramOrHost?: CompilerHost | SemanticDiagnosticsBuilderProgram, configFileParsingDiagnosticsOrOldProgram?: ReadonlyArray<Diagnostic> | SemanticDiagnosticsBuilderProgram, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>) {
-        return createBuilderProgram(BuilderProgramKind.SemanticDiagnosticsBuilderProgram, getBuilderCreationParameters(newProgramOrRootNames, hostOrOptions, oldProgramOrHost, configFileParsingDiagnosticsOrOldProgram, configFileParsingDiagnostics));
+    export function createSemanticDiagnosticsBuilderProgram(rootNames: ReadonlyArray<string> | undefined, options: CompilerOptions | undefined, host?: CompilerHost, oldProgram?: SemanticDiagnosticsBuilderProgram, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>, maxNonTsProgramSize?: number): SemanticDiagnosticsBuilderProgram;
+    export function createSemanticDiagnosticsBuilderProgram(newProgramOrRootNames: Program | ReadonlyArray<string> | undefined, hostOrOptions: BuilderProgramHost | CompilerOptions | undefined, oldProgramOrHost?: CompilerHost | SemanticDiagnosticsBuilderProgram, configFileParsingDiagnosticsOrOldProgram?: ReadonlyArray<Diagnostic> | SemanticDiagnosticsBuilderProgram, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>, maxNonTsProgramSize?: number) {
+        return createBuilderProgram(BuilderProgramKind.SemanticDiagnosticsBuilderProgram, getBuilderCreationParameters(newProgramOrRootNames, hostOrOptions, oldProgramOrHost, configFileParsingDiagnosticsOrOldProgram, configFileParsingDiagnostics, maxNonTsProgramSize));
     }
 
     /**
@@ -559,18 +567,18 @@ namespace ts {
      * to emit the those files and manage semantic diagnostics cache as well
      */
     export function createEmitAndSemanticDiagnosticsBuilderProgram(newProgram: Program, host: BuilderProgramHost, oldProgram?: EmitAndSemanticDiagnosticsBuilderProgram, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>): EmitAndSemanticDiagnosticsBuilderProgram;
-    export function createEmitAndSemanticDiagnosticsBuilderProgram(rootNames: ReadonlyArray<string> | undefined, options: CompilerOptions | undefined, host?: CompilerHost, oldProgram?: EmitAndSemanticDiagnosticsBuilderProgram, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>): EmitAndSemanticDiagnosticsBuilderProgram;
-    export function createEmitAndSemanticDiagnosticsBuilderProgram(newProgramOrRootNames: Program | ReadonlyArray<string> | undefined, hostOrOptions: BuilderProgramHost | CompilerOptions | undefined, oldProgramOrHost?: CompilerHost | EmitAndSemanticDiagnosticsBuilderProgram, configFileParsingDiagnosticsOrOldProgram?: ReadonlyArray<Diagnostic> | EmitAndSemanticDiagnosticsBuilderProgram, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>) {
-        return createBuilderProgram(BuilderProgramKind.EmitAndSemanticDiagnosticsBuilderProgram, getBuilderCreationParameters(newProgramOrRootNames, hostOrOptions, oldProgramOrHost, configFileParsingDiagnosticsOrOldProgram, configFileParsingDiagnostics));
+    export function createEmitAndSemanticDiagnosticsBuilderProgram(rootNames: ReadonlyArray<string> | undefined, options: CompilerOptions | undefined, host?: CompilerHost, oldProgram?: EmitAndSemanticDiagnosticsBuilderProgram, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>, maxNonTsProgramSize?: number): EmitAndSemanticDiagnosticsBuilderProgram;
+    export function createEmitAndSemanticDiagnosticsBuilderProgram(newProgramOrRootNames: Program | ReadonlyArray<string> | undefined, hostOrOptions: BuilderProgramHost | CompilerOptions | undefined, oldProgramOrHost?: CompilerHost | EmitAndSemanticDiagnosticsBuilderProgram, configFileParsingDiagnosticsOrOldProgram?: ReadonlyArray<Diagnostic> | EmitAndSemanticDiagnosticsBuilderProgram, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>, maxNonTsProgramSize?: number) {
+        return createBuilderProgram(BuilderProgramKind.EmitAndSemanticDiagnosticsBuilderProgram, getBuilderCreationParameters(newProgramOrRootNames, hostOrOptions, oldProgramOrHost, configFileParsingDiagnosticsOrOldProgram, configFileParsingDiagnostics, maxNonTsProgramSize));
     }
 
     /**
      * Creates a builder thats just abstraction over program and can be used with watch
      */
     export function createAbstractBuilder(newProgram: Program, host: BuilderProgramHost, oldProgram?: BuilderProgram, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>): BuilderProgram;
-    export function createAbstractBuilder(rootNames: ReadonlyArray<string> | undefined, options: CompilerOptions | undefined, host?: CompilerHost, oldProgram?: BuilderProgram, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>): BuilderProgram;
-    export function createAbstractBuilder(newProgramOrRootNames: Program | ReadonlyArray<string> | undefined, hostOrOptions: BuilderProgramHost | CompilerOptions | undefined, oldProgramOrHost?: CompilerHost | BuilderProgram, configFileParsingDiagnosticsOrOldProgram?: ReadonlyArray<Diagnostic> | BuilderProgram, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>): BuilderProgram {
-        const { newProgram: program } = getBuilderCreationParameters(newProgramOrRootNames, hostOrOptions, oldProgramOrHost, configFileParsingDiagnosticsOrOldProgram, configFileParsingDiagnostics);
+    export function createAbstractBuilder(rootNames: ReadonlyArray<string> | undefined, options: CompilerOptions | undefined, host?: CompilerHost, oldProgram?: BuilderProgram, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>, maxNonTsProgramSize?: number): BuilderProgram;
+    export function createAbstractBuilder(newProgramOrRootNames: Program | ReadonlyArray<string> | undefined, hostOrOptions: BuilderProgramHost | CompilerOptions | undefined, oldProgramOrHost?: CompilerHost | BuilderProgram, configFileParsingDiagnosticsOrOldProgram?: ReadonlyArray<Diagnostic> | BuilderProgram, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>, maxNonTsProgramSize?: number): BuilderProgram {
+        const { newProgram: program } = getBuilderCreationParameters(newProgramOrRootNames, hostOrOptions, oldProgramOrHost, configFileParsingDiagnosticsOrOldProgram, configFileParsingDiagnostics, maxNonTsProgramSize);
         return {
             // Only return program, all other methods are not implemented
             getProgram: () => program,
@@ -585,7 +593,8 @@ namespace ts {
             getSemanticDiagnostics: notImplemented,
             emit: notImplemented,
             getAllDependencies: notImplemented,
-            getCurrentDirectory: notImplemented
+            getCurrentDirectory: notImplemented,
+            exceedsSizeLimit: () => program.exceedsSizeLimit()
         };
     }
 }

@@ -108,6 +108,7 @@ namespace ts {
         getSemanticDiagnostics(): ReadonlyArray<Diagnostic>;
         getConfigFileParsingDiagnostics(): ReadonlyArray<Diagnostic>;
         emit(): EmitResult;
+        exceedsSizeLimit(): boolean;
     }
 
     export type ReportEmitErrorSummary = (errorCount: number) => void;
@@ -120,12 +121,12 @@ namespace ts {
         const diagnostics = program.getConfigFileParsingDiagnostics().slice();
         const configFileParsingDiagnosticsLength = diagnostics.length;
         addRange(diagnostics, program.getSyntacticDiagnostics());
+        addRange(diagnostics, program.getOptionsDiagnostics());
         let reportSemanticDiagnostics = false;
 
         // If we didn't have any syntactic errors, then also try getting the global and
         // semantic errors.
         if (diagnostics.length === configFileParsingDiagnosticsLength) {
-            addRange(diagnostics, program.getOptionsDiagnostics());
             addRange(diagnostics, program.getGlobalDiagnostics());
 
             if (diagnostics.length === configFileParsingDiagnosticsLength) {
@@ -133,9 +134,13 @@ namespace ts {
             }
         }
 
-        // Emit and report any errors we ran into.
-        const { emittedFiles, emitSkipped, diagnostics: emitDiagnostics } = program.emit();
-        addRange(diagnostics, emitDiagnostics);
+        let emittedFiles: string[] | undefined, emitSkipped = true;
+        if (!program.exceedsSizeLimit()) {
+            // Emit and report any errors we ran into.
+            const result = program.emit();
+            addRange(diagnostics, result.diagnostics);
+            ({ emittedFiles, emitSkipped } = result);
+        }
 
         if (reportSemanticDiagnostics) {
             addRange(diagnostics, program.getSemanticDiagnostics());
@@ -268,7 +273,7 @@ namespace ts {
 namespace ts {
     export type WatchStatusReporter = (diagnostic: Diagnostic, newLine: string, options: CompilerOptions) => void;
     /** Create the program with rootNames and options, if they are undefined, oldProgram and new configFile diagnostics create new program */
-    export type CreateProgram<T extends BuilderProgram> = (rootNames: ReadonlyArray<string> | undefined, options: CompilerOptions | undefined, host?: CompilerHost, oldProgram?: T, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>) => T;
+    export type CreateProgram<T extends BuilderProgram> = (rootNames: ReadonlyArray<string> | undefined, options: CompilerOptions | undefined, host?: CompilerHost, oldProgram?: T, configFileParsingDiagnostics?: ReadonlyArray<Diagnostic>, maxNonTsProgramSize?: number) => T;
     export interface WatchCompilerHost<T extends BuilderProgram> {
         // TODO: GH#18217 Optional methods are frequently asserted
 
@@ -331,6 +336,9 @@ namespace ts {
         setTimeout?(callback: (...args: any[]) => void, ms: number, ...args: any[]): any;
         /** If provided, will be used to reset existing delayed compilation */
         clearTimeout?(timeoutId: any): void;
+
+        /** If present used as limit for the maxNonTsProgramSize */
+        getMaxNonTsProgramSize?(): number;
     }
 
     /** Internal interface used to wire emit through same host */
@@ -612,7 +620,7 @@ namespace ts {
             resolutionCache.startCachingPerDirectoryResolution();
             compilerHost.hasInvalidatedResolution = hasInvalidatedResolution;
             compilerHost.hasChangedAutomaticTypeDirectiveNames = hasChangedAutomaticTypeDirectiveNames;
-            builderProgram = createProgram(rootFileNames, compilerOptions, compilerHost, builderProgram, configFileParsingDiagnostics);
+            builderProgram = createProgram(rootFileNames, compilerOptions, compilerHost, builderProgram, configFileParsingDiagnostics, host.getMaxNonTsProgramSize && host.getMaxNonTsProgramSize());
             resolutionCache.finishCachingPerDirectoryResolution();
 
             // Update watches

@@ -18,6 +18,7 @@ namespace ts {
     export const resolvingEmptyArray: never[] = [] as never[];
     export const emptyMap: ReadonlyMap<never> = createMap<never>();
     export const emptyUnderscoreEscapedMap: ReadonlyUnderscoreEscapedMap<never> = emptyMap as ReadonlyUnderscoreEscapedMap<never>;
+    export const maxProgramSizeForNonTsFiles = 20 * 1024 * 1024;
 
     export const externalHelpersModuleNameText = "tslib";
 
@@ -4327,6 +4328,10 @@ namespace ts {
 
     export function isObjectTypeDeclaration(node: Node): node is ObjectTypeDeclaration {
         return isClassLike(node) || isInterfaceDeclaration(node) || isTypeLiteralNode(node);
+    }
+
+    export function throwIfProgramExceededSizeLimit(program: { exceedsSizeLimit(): boolean; }) {
+        return Debug.assert(!program.exceedsSizeLimit(), "Invalid operation when size limit is exceeded");
     }
 }
 

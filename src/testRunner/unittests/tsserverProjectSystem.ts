@@ -2840,7 +2840,7 @@ namespace ts.projectSystem {
             assert.isFalse(lastEvent.data.languageServiceEnabled, "Language service state");
 
             const options = projectService.getFormatCodeOptions(f1.path as server.NormalizedPath);
-            const edits = project.getLanguageService().getFormattingEditsForDocument(f1.path, options);
+            const edits = project.getLanguageService(/*ensureSynchronized*/ false).getFormattingEditsForDocument(f1.path, options); // Syntactic feature, no need for project structure update
             assert.deepEqual(edits, [{ span: createTextSpan(/*start*/ 7, /*length*/ 3), newText: " " }]);
         });
 
@@ -8767,8 +8767,8 @@ export const x = 10;`
     });
 
     describe("tsserverProjectSystem project size", () => {
+        const projectRoot = "/user/username/projects/project";
         it("when module included is larger than available size quota", () => {
-            const projectRoot = "/user/username/projects/project"
             const app: File = {
                 path: `${projectRoot}/app.js`,
                 content: `import { a } from "./module"`,
@@ -8794,7 +8794,6 @@ export const x = 10;`
         });
 
         it("when opened large file", () => {
-            const projectRoot = "/user/username/projects/project"
             const app: File = {
                 path: `${projectRoot}/app.js`,
                 content: `import { a } from "./module"`,
@@ -8819,8 +8818,9 @@ export const x = 10;`
             const project = service.configuredProjects.get(config.path)!;
             assert.isFalse(project.languageServiceEnabled);
             const program = project.getCurrentProgram();
-            // Module shouldnt be included in the program
-            assert.equal(program.getSourceFiles().map(f => f.fileName), [app.path]);
+            // Program is updated but its disabled for language service
+            checkArray("Files in the program", program.getSourceFiles().map(f => f.fileName), [module.path, app.path]);
+            assert.isTrue(program.exceedsSizeLimit());
         });
     });
 }
