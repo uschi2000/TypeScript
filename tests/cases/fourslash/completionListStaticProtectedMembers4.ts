@@ -62,13 +62,3 @@ verify.completions(
         ],
     },
 );
-
-goTo.marker("2");
-verify.not.completionListContains('privateMethod');
-verify.not.completionListContains('privateProperty');
-verify.not.completionListContains('protectedMethod');
-verify.not.completionListContains('protectedProperty');
-verify.completionListContains('publicMethod');
-verify.completionListContains('publicProperty');
-verify.completionListContains('protectedOverriddenMethod');
-verify.completionListContains('protectedOverriddenProperty');
