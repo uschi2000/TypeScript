@@ -26,18 +26,43 @@
 ////}
 //// Derived./*2*/
 
-// Sub class, everything but private is visible
-goTo.marker("1");
-verify.not.completionListContains('privateMethod');
-verify.not.completionListContains('privateProperty');
-verify.completionListContains('protectedMethod');
-verify.completionListContains('protectedProperty');
-verify.completionListContains('publicMethod');
-verify.completionListContains('publicProperty');
-verify.completionListContains('protectedOverriddenMethod');
-verify.completionListContains('protectedOverriddenProperty');
+const publicCompletions: ReadonlyArray<string> = [
+    "publicMethod",
+    "publicProperty",
+    "apply",
+    "call",
+    "bind",
+    "toString",
+    "length",
+    "arguments",
+    "caller"
+];
 
-// Can see protected methods elevated to public
+verify.completions(
+    {
+        // Sub class, everything but private is visible
+        marker: "1",
+        exact: [
+            "prototype",
+            "protectedOverriddenMethod",
+            "protectedOverriddenProperty",
+            "protectedMethod",
+            "protectedProperty",
+            ...publicCompletions
+        ],
+    },
+    {
+        // Can see protected methods elevated to public
+        marker: "2",
+        exact: [
+            "prototype",
+            "protectedOverriddenMethod",
+            "protectedOverriddenProperty",
+            ...publicCompletions,
+        ],
+    },
+);
+
 goTo.marker("2");
 verify.not.completionListContains('privateMethod');
 verify.not.completionListContains('privateProperty');

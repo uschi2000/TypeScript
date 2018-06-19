@@ -16,8 +16,8 @@
 //// }
 
 verify.completions(
-    { marker: "0", excludes: "myClass" },
+    { marker: "0", excludes: "myClass", isNewIdentifierLocation: true },
     { marker: ["1", "4"], includes: { name: "myClass", text: "class myClass", kind: "class" } },
     { marker: "2", includes: { name: "myClass", text: "(local class) myClass", kind: "local class" } },
-    { marker: ["3", "5"], excludes: "myClass" },
+    { marker: ["3", "5"], excludes: "myClass", isNewIdentifierLocation: true },
 );
