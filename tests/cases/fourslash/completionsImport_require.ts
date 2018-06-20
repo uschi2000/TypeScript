@@ -20,10 +20,8 @@
 ////const a = import("./a"); // Does not make this an external module
 ////fo/*e*/
 
-for (const marker of ["c", "d", "e"]) {
-    // Doesn't activate for commonjs-only module, or non-module file unless 'module' is set see also completionsImport_compilerOptionsModule)
-    verify.not.completionListContains({ name: "foo", source: "/a" });
-}
+// Doesn't activate for commonjs-only module, or non-module file unless 'module' is set. See also completionsImport_compilerOptionsModule
+verify.completions({ marker: ["c", "d", "e"], excludes: "foo", preferences: { includeCompletionsForModuleExports: true } });
 
 goTo.marker("b");
 verify.completionListContains({ name: "foo", source: "/a" }, "const foo: 0", "", "const", /*spanIndex*/ undefined, /*hasAction*/ true, {

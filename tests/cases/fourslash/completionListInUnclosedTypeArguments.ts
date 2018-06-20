@@ -23,20 +23,13 @@
 ////f2<() =>/*1y*/T/*2y*/y/*3y*/, () =>/*4y*/T/*5y*/y/*6y*/
 ////f2<any, () =>/*1z*/T/*2z*/y/*3z*/
 
-
-goTo.eachMarker((marker) => {
+goTo.eachMarker(marker => {
     const markerName = test.markerName(marker);
-    if (markerName.endsWith("TypeOnly")) {
-        verify.not.completionListContains("x");
-    }
-    else {
-        verify.completionListContains("x");
-    }
-
-    if (markerName.endsWith("ValueOnly")) {
-        verify.not.completionListContains("Type");
-    }
-    else {
-        verify.completionListContains("Type");
-    }
+    const typeOnly = markerName.endsWith("TypeOnly");
+    const valueOnly = markerName.endsWith("ValueOnly");
+    verify.completions({
+        marker: markerName,
+        includes: typeOnly ? "Type" : valueOnly ? "x" : ["Type", "x"],
+        excludes: typeOnly ? "x" : valueOnly ? "Type" : [],
+    });
 });
