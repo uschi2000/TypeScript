@@ -31,5 +31,6 @@ goTo.eachMarker(marker => {
         marker: markerName,
         includes: typeOnly ? "Type" : valueOnly ? "x" : ["Type", "x"],
         excludes: typeOnly ? "x" : valueOnly ? "Type" : [],
+        isNewIdentifierLocation: true,
     });
 });
